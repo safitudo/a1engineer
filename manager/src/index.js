@@ -1,7 +1,7 @@
 import { readFile } from 'fs/promises'
 import * as teamStore from './store/teams.js'
 import { startTeam, stopTeam } from './orchestrator/compose.js'
-import { createHeartbeatServer } from './watchdog/collector.js'
+import { createApp } from './api/index.js'
 
 const [, , command, ...rest] = process.argv
 
@@ -67,10 +67,11 @@ async function main() {
     }
 
     case 'serve': {
-      // Start heartbeat server (used when Manager runs as a daemon in Phase 2)
       const { port = '8080' } = parseArgs(rest)
-      createHeartbeatServer(Number(port))
-      console.log('[manager] heartbeat server running. Ctrl-C to stop.')
+      const app = createApp()
+      app.listen(Number(port), () => {
+        console.log(`[manager] REST API listening on :${port}`)
+      })
       break
     }
 
