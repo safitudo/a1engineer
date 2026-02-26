@@ -77,6 +77,7 @@ export class IrcGateway extends EventEmitter {
   }
 
   #scheduleReconnect() {
+    clearTimeout(this.#reconnectTimer)
     this.#reconnectTimer = setTimeout(() => {
       this.connect()
     }, this.#reconnectDelay)
