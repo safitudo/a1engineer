@@ -1,0 +1,3 @@
+FROM a1-agent-base:latest
+
+RUN npm install -g @anthropic-ai/claude-code
