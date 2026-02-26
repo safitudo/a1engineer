@@ -105,6 +105,21 @@ describe('renderCompose — api-key auth', () => {
     expect(yaml).not.toContain('/root/.claude')
   })
 
+  it('uses explicit apiKey param over process.env.ANTHROPIC_API_KEY', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-env-key'
+    await renderCompose(
+      { ...BASE_CONFIG, auth: { mode: 'api-key' } },
+      '/tmp/secrets',
+      'sk-per-team-key'
+    )
+    expect(writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('anthropic_key.txt'),
+      'sk-per-team-key',
+      'utf8'
+    )
+    delete process.env.ANTHROPIC_API_KEY
+  })
+
   it('writes empty string when ANTHROPIC_API_KEY is unset', async () => {
     delete process.env.ANTHROPIC_API_KEY
     await renderCompose(

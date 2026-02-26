@@ -35,7 +35,7 @@ async function resolveSecrets(secretsDir) {
   return result
 }
 
-export async function renderCompose(teamConfig, secretsDir = null) {
+export async function renderCompose(teamConfig, secretsDir = null, apiKey = null) {
   const auth = teamConfig.auth ?? { mode: 'session', sessionPath: '~/.claude' }
 
   if (!VALID_AUTH_MODES.includes(auth.mode)) {
@@ -53,8 +53,8 @@ export async function renderCompose(teamConfig, secretsDir = null) {
     // api-key: write key to secrets file — never injected as plain env var
     authContext = { mode: 'api-key' }
     if (secretsDir) {
-      const apiKey = process.env.ANTHROPIC_API_KEY ?? ''
-      await writeFile(join(secretsDir, KNOWN_SECRETS.anthropic_key), apiKey, 'utf8')
+      const key = apiKey ?? process.env.ANTHROPIC_API_KEY ?? ''
+      await writeFile(join(secretsDir, KNOWN_SECRETS.anthropic_key), key, 'utf8')
     }
   }
 
@@ -70,8 +70,9 @@ export async function renderCompose(teamConfig, secretsDir = null) {
   })
 }
 
-export async function startTeam(teamConfig, secretsDir = null) {
-  const rendered = await renderCompose(teamConfig, secretsDir)
+export async function startTeam(teamConfig, opts = {}) {
+  const secretsDir = opts.secretsDir ?? null
+  const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null)
   const teamDir = join(TEAMS_DIR, teamConfig.id)
   await mkdir(teamDir, { recursive: true })
   const composePath = join(teamDir, 'docker-compose.yml')
