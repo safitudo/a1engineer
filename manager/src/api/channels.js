@@ -12,8 +12,8 @@ const GATEWAY_NOT_READY = {
   code: 'GATEWAY_NOT_READY',
 }
 
-function requireTeam(req, res) {
-  const team = teamStore.getTeam(req.params.id)
+async function requireTeam(req, res) {
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) {
     res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
     return null
@@ -22,23 +22,23 @@ function requireTeam(req, res) {
 }
 
 // GET /api/teams/:id/channels — list channels for team
-router.get('/', (req, res) => {
-  const team = requireTeam(req, res)
+router.get('/', async (req, res) => {
+  const team = await requireTeam(req, res)
   if (!team) return
   // Static list of well-known channels — gateway will provide live membership
   res.json(['#main', '#tasks', '#code', '#testing', '#merges'].map((name) => ({ name, team: team.id })))
 })
 
 // GET /api/teams/:id/channels/:name/messages — read messages (via IRC gateway)
-router.get('/:name/messages', (req, res) => {
-  const team = requireTeam(req, res)
+router.get('/:name/messages', async (req, res) => {
+  const team = await requireTeam(req, res)
   if (!team) return
   res.status(501).json(GATEWAY_NOT_READY)
 })
 
 // POST /api/teams/:id/channels/:name/messages — send message (via IRC gateway)
-router.post('/:name/messages', (req, res) => {
-  const team = requireTeam(req, res)
+router.post('/:name/messages', async (req, res) => {
+  const team = await requireTeam(req, res)
   if (!team) return
   const { text } = req.body ?? {}
   if (!text || typeof text !== 'string') {

@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: manager
+      POSTGRES_PASSWORD: manager
+      POSTGRES_DB: manager
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U manager -d manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  manager:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://manager:manager@postgres:5432/manager
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/a1-teams:/tmp/a1-teams
+    command: ["node", "src/index.js", "serve", "--port", "8080"]
+
+volumes:
+  postgres_data:

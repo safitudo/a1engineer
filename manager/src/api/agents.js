@@ -8,15 +8,15 @@ const execFileAsync = promisify(execFile)
 const router = Router({ mergeParams: true })
 
 // GET /api/teams/:id/agents — list agents in team
-router.get('/', (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
+router.get('/', async (req, res) => {
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   res.json(team.agents)
 })
 
 // POST /api/teams/:id/agents — spawn a new agent into the running team
 router.post('/', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
   const { role, model, runtime, prompt, env } = req.body ?? {}
@@ -36,7 +36,7 @@ router.post('/', async (req, res) => {
   }
 
   const updatedAgents = [...team.agents, newAgent]
-  const updatedTeam = teamStore.updateTeam(team.id, { agents: updatedAgents })
+  const updatedTeam = await teamStore.updateTeam(team.id, { agents: updatedAgents })
 
   try {
     // Re-render and apply compose — new service will be added, existing ones untouched
@@ -44,7 +44,7 @@ router.post('/', async (req, res) => {
     return res.status(201).json(newAgent)
   } catch (err) {
     // Roll back store addition
-    teamStore.updateTeam(team.id, { agents: team.agents })
+    await teamStore.updateTeam(team.id, { agents: team.agents })
     console.error('[api/agents] spawn failed:', err)
     return res.status(500).json({ error: 'failed to spawn agent', code: 'COMPOSE_ERROR' })
   }
@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
 
 // DELETE /api/teams/:id/agents/:agentId — kill a single agent container
 router.delete('/:agentId', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
   const agent = team.agents.find((a) => a.id === req.params.agentId)
@@ -68,13 +68,13 @@ router.delete('/:agentId', async (req, res) => {
   }
 
   const updatedAgents = team.agents.filter((a) => a.id !== req.params.agentId)
-  teamStore.updateTeam(team.id, { agents: updatedAgents })
+  await teamStore.updateTeam(team.id, { agents: updatedAgents })
   res.status(204).end()
 })
 
 // POST /api/teams/:id/agents/:agentId/nudge — send a message to agent via docker exec
 router.post('/:agentId/nudge', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
   const agent = team.agents.find((a) => a.id === req.params.agentId)

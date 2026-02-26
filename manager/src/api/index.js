@@ -10,9 +10,9 @@ export function createApp() {
   app.use(express.json())
 
   // POST /heartbeat/:teamId/:agentId — keep-alive from agent containers
-  app.post('/heartbeat/:teamId/:agentId', (req, res) => {
+  app.post('/heartbeat/:teamId/:agentId', async (req, res) => {
     const { teamId, agentId } = req.params
-    const team = getTeam(teamId)
+    const team = await getTeam(teamId)
     if (!team) {
       return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
     }
@@ -20,7 +20,7 @@ export function createApp() {
     const agents = team.agents.map((a) =>
       a.id === agentId ? { ...a, last_heartbeat: now } : a
     )
-    updateTeam(teamId, { agents })
+    await updateTeam(teamId, { agents })
     broadcastHeartbeat(teamId, agentId, now)
     console.log(`[heartbeat] team=${teamId} agent=${agentId} at=${now}`)
     return res.json({ ok: true, at: now })

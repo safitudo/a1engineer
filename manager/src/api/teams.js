@@ -20,33 +20,33 @@ router.post('/', async (req, res) => {
     if (!a.role) return res.status(400).json({ error: 'each agent must have a role', code: 'MISSING_AGENT_ROLE' })
   }
 
-  const team = teamStore.createTeam({ name, repo, agents, auth })
+  const team = await teamStore.createTeam({ name, repo, agents, auth })
   try {
     await startTeam(team)
-    teamStore.updateTeam(team.id, { status: 'running' })
-    return res.status(201).json(teamStore.getTeam(team.id))
+    await teamStore.updateTeam(team.id, { status: 'running' })
+    return res.status(201).json(await teamStore.getTeam(team.id))
   } catch (err) {
-    teamStore.deleteTeam(team.id)
+    await teamStore.deleteTeam(team.id)
     console.error('[api/teams] startTeam failed:', err)
     return res.status(500).json({ error: 'failed to start team', code: 'COMPOSE_ERROR' })
   }
 })
 
 // GET /api/teams — list all teams
-router.get('/', (_req, res) => {
-  res.json(teamStore.listTeams())
+router.get('/', async (_req, res) => {
+  res.json(await teamStore.listTeams())
 })
 
 // GET /api/teams/:id — team detail
-router.get('/:id', (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
+router.get('/:id', async (req, res) => {
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   res.json(team)
 })
 
-// PATCH /api/teams/:id — update team config (name, apiKeys only — agents/repo require re-create)
-router.patch('/:id', (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
+// PATCH /api/teams/:id — update team config (name, auth only — agents/repo require re-create)
+router.patch('/:id', async (req, res) => {
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
   const { name, auth } = req.body ?? {}
@@ -64,13 +64,13 @@ router.patch('/:id', (req, res) => {
     updates.auth = auth
   }
 
-  const updated = teamStore.updateTeam(req.params.id, updates)
+  const updated = await teamStore.updateTeam(req.params.id, updates)
   res.json(updated)
 })
 
 // DELETE /api/teams/:id — teardown compose stack + remove from store
 router.delete('/:id', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
+  const team = await teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
   try {
@@ -79,7 +79,7 @@ router.delete('/:id', async (req, res) => {
     console.error('[api/teams] stopTeam failed:', err)
     // Still remove from store — compose may already be gone
   }
-  teamStore.deleteTeam(req.params.id)
+  await teamStore.deleteTeam(req.params.id)
   res.status(204).end()
 })
 
