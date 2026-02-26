@@ -204,6 +204,64 @@ This avoids exposing raw IRC to the internet. The API handles auth, rate limitin
 
 For power users who want raw IRC access (e.g., connecting Halloy), the Manager can optionally proxy TCP connections with auth, mapping external ports to team-specific Ergo instances.
 
+### 6. Web UI
+
+A Next.js application served alongside the Manager API. The UI is the primary interface for non-developer users.
+
+**Pages:**
+
+| Route | Purpose |
+|-------|---------|
+| `/` | Landing page — "Hire your agent team today" hero, product features, pricing, signup CTA |
+| `/login` | Email + password login, OAuth (GitHub, Google) |
+| `/signup` | Registration with email verification |
+| `/dashboard` | Tenant home — list of teams, usage stats, quick actions |
+| `/dashboard/teams/new` | Create team wizard — pick repo, configure agents, set API keys |
+| `/dashboard/teams/:id` | Team detail — agent status cards, live IRC feed, controls (spawn/kill/nudge) |
+| `/dashboard/teams/:id/settings` | Team config — edit agents, repos, channels, API keys |
+| `/dashboard/settings` | Tenant settings — profile, billing, API keys |
+
+**Tech stack:**
+- **Next.js 15** (App Router) — SSR for landing/auth pages, client components for dashboard
+- **React 19** — UI components
+- **Tailwind CSS** — styling
+- **WebSocket client** — connects to Manager WS for live team streams
+- **Auth**: NextAuth.js with credentials + GitHub + Google providers, JWT sessions
+
+**Architecture:**
+```
+Browser → Next.js (SSR + static) → Manager REST API → Docker/Teams
+Browser → WebSocket → Manager WS → IRC Gateway → Ergo → Agents
+```
+
+The Next.js app is a thin client over the Manager API. It holds no team state — all state lives in the Manager. Auth state (users, sessions, tenants) lives in PostgreSQL.
+
+**Multi-tenant model:**
+- Each signup creates a **tenant** (organization)
+- A tenant owns zero or more teams
+- API keys are scoped per tenant
+- All API endpoints are tenant-scoped: the JWT identifies the tenant, and the API filters accordingly
+- No cross-tenant data access — enforced at the query layer
+
+**Data model additions (PostgreSQL, Phase 2):**
+```
+Tenant
+├── id, name, created_at
+├── plan (free | pro | enterprise)
+├── users[]
+│   ├── id, email, password_hash, oauth_provider
+│   ├── role (owner | admin | member)
+│   └── last_login
+├── api_keys[]
+│   ├── key_hash, label, created_at, last_used
+│   └── permissions (scopes)
+└── teams[] (references team IDs in Manager store)
+
+Session
+├── token, user_id, tenant_id
+├── created_at, expires_at
+```
+
 ---
 
 ## Dynamic Configuration
@@ -377,6 +435,39 @@ a1engineer/
 │   ├── team-compose.yml.ejs # template for per-team docker-compose
 │   └── ergo/
 │       └── ircd.yaml
+├── web/                     # Web UI (Phase 2) — Next.js 15 app
+│   ├── package.json
+│   ├── next.config.js
+│   ├── tailwind.config.js
+│   ├── app/
+│   │   ├── layout.js        # root layout, providers, global styles
+│   │   ├── page.js           # landing page — "Hire your agent team today"
+│   │   ├── login/
+│   │   │   └── page.js       # login (email + OAuth)
+│   │   ├── signup/
+│   │   │   └── page.js       # signup + tenant provisioning
+│   │   └── dashboard/
+│   │       ├── layout.js     # authenticated shell, sidebar nav
+│   │       ├── page.js       # team list overview
+│   │       ├── teams/
+│   │       │   ├── new/
+│   │       │   │   └── page.js    # create team wizard
+│   │       │   └── [id]/
+│   │       │       ├── page.js    # team detail — agent status, live IRC
+│   │       │       └── settings/
+│   │       │           └── page.js
+│   │       └── settings/
+│   │           └── page.js   # tenant settings, API keys, billing
+│   ├── components/           # shared UI components
+│   │   ├── Header.js
+│   │   ├── Sidebar.js
+│   │   ├── TeamCard.js
+│   │   ├── AgentStatus.js
+│   │   └── IrcFeed.js        # real-time IRC message viewer (WebSocket)
+│   └── lib/
+│       ├── api.js            # fetch wrapper for Manager REST API
+│       ├── auth.js           # NextAuth.js config
+│       └── ws.js             # WebSocket client for live feeds
 └── cli/                     # optional local CLI wrapper
     └── a1.js                # a1 team create, a1 team list, a1 agent spawn, etc.
 ```
@@ -386,19 +477,24 @@ a1engineer/
 ## Build Phases
 
 ### Phase 1 — Foundation
-- [ ] Agent base image (Dockerfile with tmux, git, Node.js, msg CLI)
-- [ ] Claude Code agent variant image
-- [ ] Team compose template (Ergo + git volume + agents)
-- [ ] Manager skeleton: spawn/teardown a single team via CLI
-- [ ] `msg` and `irc-poll` working inside containers (IRC_HOST from env)
-- [ ] Heartbeat from PostToolUse hook to Manager
+- [ ] Project scaffolding (directory structure, package.json files) — **#1**
+- [ ] IRC tooling: `msg` CLI and `irc-poll` for agent communication — **#4**
+- [ ] Ergo IRC server configuration — **#6**
+- [ ] Agent base image + Claude Code variant (Dockerfiles + entrypoint) — **#7**
+- [ ] Team compose template (EJS → docker-compose.yml) — **#8**
+- [ ] Manager skeleton: spawn/teardown a single team via CLI + heartbeat — **#9**
 
-### Phase 2 — Manager API + Dynamic Config
-- [ ] REST API: team CRUD, agent spawn/kill
+### Phase 2 — Manager API + UI + Multi-tenant
+- [ ] REST API: team CRUD, agent spawn/kill, channel messages
 - [ ] IRC gateway: Manager connects to each team's Ergo, bridges to API
 - [ ] WebSocket stream for real-time monitoring
 - [ ] Dynamic config: add/remove agents and tools at runtime
 - [ ] Nudge dispatch via `docker exec`
+- [ ] **Web UI — Landing page** ("Hire your agent team today"), product marketing, signup CTA
+- [ ] **Web UI — Auth**: login/signup (email + OAuth), session management, JWT tokens
+- [ ] **Web UI — Dashboard**: team list, create team wizard, agent status, live IRC feed per team
+- [ ] **Multi-tenant**: per-tenant isolation in the API, tenant-scoped API keys, team ownership
+- [ ] **Database**: migrate from in-memory store to PostgreSQL for persistent team/tenant state
 
 ### Phase 3 — Multi-runtime + Tooling
 - [ ] Codex agent variant image
@@ -408,7 +504,6 @@ a1engineer/
 
 ### Phase 4 — Production + Scale
 - [ ] K8s operator (translate compose model to namespaces/pods)
-- [ ] Auth + billing hooks on the public API
-- [ ] Web dashboard
+- [ ] Billing hooks on the public API
 - [ ] Audit logging
 - [ ] Multi-node deployment
