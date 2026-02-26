@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://a1engineer/schemas/team-config.json",
+  "title": "Team Config",
+  "description": "Schema for an A1 Engineer team configuration file.",
+  "type": "object",
+  "required": ["name", "repo", "agents"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference. Allowed so IDE tooling can include $schema in config files without failing validation."
+    },
+    "name": {
+      "type": "string",
+      "description": "Team name. Used as suffix for compose services: ergo-{name}, net-{name}, agent-{name}-{role}.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 2,
+      "maxLength": 32
+    },
+    "repo": {
+      "type": "object",
+      "description": "Repository to clone into the team's git volume.",
+      "required": ["url"],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Git remote URL (HTTPS or SSH).",
+          "format": "uri"
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch to check out. Defaults to 'main'.",
+          "default": "main"
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "description": "Agent definitions for this team.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["role", "model"],
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Agent role. Maps to IRC_ROLE env var. Nick derived at runtime as {name}-{role} (with suffix for duplicates).",
+            "enum": ["arch", "lead", "dev", "qa", "critic"]
+          },
+          "model": {
+            "type": "string",
+            "description": "Claude model to use. Passed as CLAUDE_MODEL env var.",
+            "enum": ["opus", "sonnet", "haiku"]
+          },
+          "effort": {
+            "type": "string",
+            "description": "Thinking effort level. TODO: wire through as CLAUDE_EFFORT env var once Claude Code consumption is confirmed.",
+            "enum": ["high", "medium", "low"]
+          },
+          "runtime": {
+            "type": "string",
+            "description": "Agent runtime. Defaults to 'claude-code'.",
+            "enum": ["claude-code", "codex", "custom"],
+            "default": "claude-code"
+          }
+        }
+      }
+    },
+    "ergo": {
+      "type": "object",
+      "description": "Optional Ergo IRC server configuration. Defaults are sufficient for local dev.",
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "description": "Docker image for the Ergo IRC server.",
+          "default": "a1-ergo:latest"
+        },
+        "configPath": {
+          "type": "string",
+          "description": "Host path to ircd.yaml to bind-mount into the container.",
+          "default": "./templates/ergo/ircd.yaml"
+        },
+        "port": {
+          "type": "integer",
+          "description": "IRC port exposed on the internal Docker network.",
+          "default": 6667
+        }
+      }
+    }
+  }
+}
