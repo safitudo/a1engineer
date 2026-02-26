@@ -47,6 +47,7 @@ services:
     environment:
       IRC_HOST: "ergo-<%- team.name %>"
       IRC_PORT: "<%- ergo.port || 6667 %>"
+      IRC_NICK: "<%- agent.id %>"
       IRC_ROLE: "<%- agent.role %>"
       CITY: "<%- team.name %>"
       AGENT_RUNTIME: "<%- agent.runtime %>"
