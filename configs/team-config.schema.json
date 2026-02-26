@@ -7,6 +7,10 @@
   "required": ["name", "repo", "agents"],
   "additionalProperties": false,
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference. Allowed so IDE tooling can include $schema in config files without failing validation."
+    },
     "name": {
       "type": "string",
       "description": "Team name. Used as suffix for compose services: ergo-{name}, net-{name}, agent-{name}-{role}.",
