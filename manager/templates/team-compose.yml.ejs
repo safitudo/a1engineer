@@ -26,14 +26,16 @@ services:
 
   # ── Git volume initialiser (one-shot) ──────────────────────────────────────
   git-init-<%- team.name %>:
-    image: alpine/git
+    image: a1-git-init:latest
     volumes:
       - git-<%- team.name %>:/git
     environment:
       REPO_URL: <%- JSON.stringify(repo.url) %>
       REPO_BRANCH: <%- JSON.stringify(repo.branch) %>
-    entrypoint: ["/bin/sh", "-c"]
-    command: "[ -d /git/.git ] || git clone --branch $$REPO_BRANCH $$REPO_URL /git"
+      AGENTS: <%- JSON.stringify(JSON.stringify(agents.map(function(a){ return { role: a.role, city: team.name }; }))) %>
+<% if (repo.githubToken) { -%>
+      GITHUB_TOKEN: <%- JSON.stringify(repo.githubToken) %>
+<% } -%>
     restart: "no"
 
 <% agents.forEach(function(agent) { -%>
@@ -44,6 +46,7 @@ services:
       - net-<%- team.name %>
     volumes:
       - git-<%- team.name %>:/git
+    working_dir: "/git/worktrees/<%- agent.id %>"
     environment:
       IRC_HOST: "ergo-<%- team.name %>"
       IRC_PORT: "<%- ergo.port || 6667 %>"
@@ -54,6 +57,7 @@ services:
       MODEL: "<%- agent.model %>"
       HEARTBEAT_URL: "http://manager:8080/heartbeat/<%- team.id %>/<%- agent.id %>"
       AGENT_PROMPT: <%- JSON.stringify(agent.prompt) %>
+      WORKTREE_PATH: "/git/worktrees/<%- agent.id %>"
 <% Object.entries(agent.env || {}).forEach(function([k, v]) { -%>
       <%- k %>: <%- JSON.stringify(String(v)) %>
 <% }); -%>
