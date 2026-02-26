@@ -10,7 +10,9 @@ import ejs from 'ejs'
 const execFileAsync = promisify(execFile)
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE_PATH = join(__dirname, '../../templates/team-compose.yml.ejs')
+const ERGO_TEMPLATE_PATH = join(__dirname, '../../templates/ergo/ircd.yaml')
 const TEAMS_DIR = '/tmp/a1-teams'
+const ERGO_IMAGE = 'ghcr.io/ergochat/ergo:stable'
 
 const VALID_AUTH_MODES = ['session', 'api-key']
 
@@ -72,9 +74,16 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
 
 export async function startTeam(teamConfig, opts = {}) {
   const secretsDir = opts.secretsDir ?? null
-  const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null)
   const teamDir = join(TEAMS_DIR, teamConfig.id)
   await mkdir(teamDir, { recursive: true })
+
+  // Write ergo IRC config into team dir so it can be bind-mounted
+  const ergoConfigPath = join(teamDir, 'ircd.yaml')
+  await writeFile(ergoConfigPath, await readFile(ERGO_TEMPLATE_PATH, 'utf8'), 'utf8')
+
+  // Apply ergo defaults (allow teamConfig.ergo to override image/port)
+  const ergo = { image: ERGO_IMAGE, configPath: ergoConfigPath, port: 6667, ...teamConfig.ergo }
+  const rendered = await renderCompose({ ...teamConfig, ergo }, secretsDir, opts.apiKey ?? null)
   const composePath = join(teamDir, 'docker-compose.yml')
   await writeFile(composePath, rendered, 'utf8')
   await execFileAsync('docker', ['compose', '-f', composePath, 'up', '-d'])
