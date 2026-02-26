@@ -12,22 +12,6 @@ afterEach(() => {
   for (const team of listTeams()) deleteTeam(team.id)
 })
 
-function postHeartbeat(port, teamId, agentId) {
-  return new Promise((resolve, reject) => {
-    const req = require('http').request(
-      { hostname: '127.0.0.1', port, path: `/heartbeat/${teamId}/${agentId}`, method: 'POST' },
-      (res) => {
-        let body = ''
-        res.on('data', (c) => { body += c })
-        res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(body) }))
-      }
-    )
-    req.on('error', reject)
-    req.end()
-  })
-}
-
-// Use a helper that works with ESM (no require)
 async function post(port, path) {
   const { default: http } = await import('http')
   return new Promise((resolve, reject) => {
