@@ -29,9 +29,10 @@ async function main() {
       const raw = await readFile(configPath, 'utf8')
       const config = JSON.parse(raw)
       const secretsDir = secretsArg ? resolve(secretsArg) : null
+      const apiKey = config.auth?.apiKey ?? null  // grab before createTeam/normalizeAuth strips it
       const team = teamStore.createTeam(config)
       console.log(`Creating team ${team.id} (${team.name})…`)
-      await startTeam(team, secretsDir)
+      await startTeam(team, { secretsDir, apiKey })
       teamStore.updateTeam(team.id, { status: 'running' })
       console.log(`Team ${team.id} is running.`)
       console.log(JSON.stringify(teamStore.getTeam(team.id), null, 2))

@@ -4,12 +4,15 @@ import { promisify } from 'util'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
+import { homedir } from 'os'
 import ejs from 'ejs'
 
 const execFileAsync = promisify(execFile)
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE_PATH = join(__dirname, '../../templates/team-compose.yml.ejs')
 const TEAMS_DIR = '/tmp/a1-teams'
+
+const VALID_AUTH_MODES = ['session', 'api-key']
 
 // Known Docker secrets: logical name → filename in secretsDir
 const KNOWN_SECRETS = {
@@ -32,22 +35,44 @@ async function resolveSecrets(secretsDir) {
   return result
 }
 
-export async function renderCompose(teamConfig, secretsDir = null) {
-  const template = await readFile(TEMPLATE_PATH, 'utf8')
+export async function renderCompose(teamConfig, secretsDir = null, apiKey = null) {
+  const auth = teamConfig.auth ?? { mode: 'session', sessionPath: '~/.claude' }
+
+  if (!VALID_AUTH_MODES.includes(auth.mode)) {
+    throw new Error(`Unknown auth mode: ${auth.mode}. Must be one of: ${VALID_AUTH_MODES.join(', ')}`)
+  }
+
+  let authContext
+  if (auth.mode === 'session') {
+    const resolvedPath = (auth.sessionPath ?? '~/.claude').replace(/^~/, homedir())
+    await access(resolvedPath).catch(() =>
+      console.warn(`[compose] Warning: session path does not exist: ${auth.sessionPath}`)
+    )
+    authContext = { mode: 'session', resolvedPath }
+  } else {
+    // api-key: write key to secrets file — never injected as plain env var
+    authContext = { mode: 'api-key' }
+    if (secretsDir) {
+      const key = apiKey ?? process.env.ANTHROPIC_API_KEY ?? ''
+      await writeFile(join(secretsDir, KNOWN_SECRETS.anthropic_key), key, 'utf8')
+    }
+  }
+
   const secrets = await resolveSecrets(secretsDir)
-  // Pass top-level vars matching the EJS template contract from #8:
-  // team, ergo, repo, agents — not nested under a single key
+  const template = await readFile(TEMPLATE_PATH, 'utf8')
   return ejs.render(template, {
     team: { id: teamConfig.id, name: teamConfig.name },
     ergo: teamConfig.ergo ?? {},
     repo: teamConfig.repo ?? {},
     agents: teamConfig.agents ?? [],
+    auth: authContext,
     secrets,
   })
 }
 
-export async function startTeam(teamConfig, secretsDir = null) {
-  const rendered = await renderCompose(teamConfig, secretsDir)
+export async function startTeam(teamConfig, opts = {}) {
+  const secretsDir = opts.secretsDir ?? null
+  const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null)
   const teamDir = join(TEAMS_DIR, teamConfig.id)
   await mkdir(teamDir, { recursive: true })
   const composePath = join(teamDir, 'docker-compose.yml')

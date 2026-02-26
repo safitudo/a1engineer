@@ -1,6 +1,19 @@
 import { randomUUID } from 'crypto'
 
 // In-memory store — Phase 1 only. Graduated to SQLite/Postgres in Phase 2.
+
+// Normalize auth config — never persist raw API keys.
+function normalizeAuth(auth) {
+  const mode = auth?.mode ?? 'session'
+  if (mode === 'session') {
+    return { mode: 'session', sessionPath: auth?.sessionPath ?? '~/.claude' }
+  }
+  if (mode === 'api-key') {
+    // API key is read from env at render time; store only the mode.
+    return { mode: 'api-key' }
+  }
+  return { mode }
+}
 const store = new Map()
 
 export function createTeam(config) {
@@ -18,7 +31,7 @@ export function createTeam(config) {
       env: a.env ?? {},
       last_heartbeat: null,
     })),
-    apiKeys: config.apiKeys ?? {},
+    auth: normalizeAuth(config.auth),
     status: 'creating',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
