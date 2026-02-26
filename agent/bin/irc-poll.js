@@ -52,8 +52,9 @@ async function poll() {
     })
 
     for (const ch of config.channels) {
-      const since = history[ch] || '*'
-      client.raw(`CHATHISTORY LATEST ${ch} timestamp=${since} 50`)
+      const since = history[ch]
+      const ref = since ? `timestamp=${since}` : '*'
+      client.raw(`CHATHISTORY LATEST ${ch} ${ref} 50`)
     }
 
     setTimeout(resolve, 1000)
