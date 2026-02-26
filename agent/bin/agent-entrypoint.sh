@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 set -e
 
-# 1. Start tmux session
+# ── Workspace ───────────────────────────────────────────────────────────────
+# WORKSPACE points to the repo checkout (or worktree) where CLAUDE.md and
+# .context/agents/ live.  Defaults to /git (the shared volume mount).
+WORKSPACE="${WORKSPACE:-/git}"
+
+if [ -d "$WORKSPACE" ]; then
+  cd "$WORKSPACE"
+fi
+
+# ── tmux ────────────────────────────────────────────────────────────────────
 tmux new-session -d -s agent
 
-# 2. Configure git identity
+# ── Git identity ────────────────────────────────────────────────────────────
 if [ -n "$GIT_NAME" ]; then
   git config --global user.name "$GIT_NAME"
 fi
@@ -12,7 +21,7 @@ if [ -n "$GIT_EMAIL" ]; then
   git config --global user.email "$GIT_EMAIL"
 fi
 
-# 3. Write .claude/settings.json with PostToolUse hook for irc-poll
+# ── .claude/settings.json — irc-poll hook ───────────────────────────────────
 mkdir -p /root/.claude
 cat > /root/.claude/settings.json <<'EOF'
 {
@@ -25,29 +34,52 @@ cat > /root/.claude/settings.json <<'EOF'
 }
 EOF
 
-# 4. If $AGENT_PROMPT is set, write it to /tmp/prompt.md
-if [ -n "$AGENT_PROMPT" ]; then
-  printf '%s' "$AGENT_PROMPT" > /tmp/prompt.md
+# ── Role-specific config from filesystem ────────────────────────────────────
+# .context/agents/{role}/config.json → model override
+# .context/agents/{role}/prompt.md   → role prompt (preferred over AGENT_PROMPT)
+ROLE_DIR="$WORKSPACE/.context/agents/$IRC_ROLE"
+PROMPT_FILE=""
+
+if [ -d "$ROLE_DIR" ]; then
+  # Model override from config.json
+  if [ -f "$ROLE_DIR/config.json" ]; then
+    CONFIG_MODEL=$(jq -r '.model // empty' "$ROLE_DIR/config.json" 2>/dev/null)
+    if [ -n "$CONFIG_MODEL" ]; then
+      MODEL="$CONFIG_MODEL"
+    fi
+  fi
+
+  # Prompt from filesystem (takes priority over AGENT_PROMPT env var)
+  if [ -f "$ROLE_DIR/prompt.md" ]; then
+    PROMPT_FILE="$ROLE_DIR/prompt.md"
+  fi
 fi
 
-# 5. Launch agent in tmux based on $AGENT_RUNTIME
-AGENT_RUNTIME="${AGENT_RUNTIME:-claude-code}"
-MODEL="${MODEL:-claude-sonnet-4-20250514}"
+# Fall back to AGENT_PROMPT env var
+if [ -z "$PROMPT_FILE" ] && [ -n "$AGENT_PROMPT" ]; then
+  printf '%s' "$AGENT_PROMPT" > /tmp/prompt.md
+  PROMPT_FILE="/tmp/prompt.md"
+fi
 
+# ── Resolve runtime + model defaults ───────────────────────────────────────
+AGENT_RUNTIME="${AGENT_RUNTIME:-claude-code}"
+MODEL="${MODEL:-sonnet}"
+
+# ── Launch agent in tmux ───────────────────────────────────────────────────
 case "$AGENT_RUNTIME" in
   claude-code)
-    if [ -f /tmp/prompt.md ]; then
-      tmux send-keys -t agent "claude --model $MODEL --prompt-file /tmp/prompt.md" Enter
-    else
-      tmux send-keys -t agent "claude --model $MODEL" Enter
+    CMD="claude --model $MODEL"
+    if [ -n "$PROMPT_FILE" ]; then
+      CMD="$CMD --prompt-file $PROMPT_FILE"
     fi
+    tmux send-keys -t agent "$CMD" Enter
     ;;
   codex)
-    if [ -f /tmp/prompt.md ]; then
-      tmux send-keys -t agent "codex --model $MODEL --instructions \"$(cat /tmp/prompt.md)\"" Enter
-    else
-      tmux send-keys -t agent "codex --model $MODEL" Enter
+    CMD="codex --model $MODEL"
+    if [ -n "$PROMPT_FILE" ]; then
+      CMD="$CMD --instructions \"\$(cat $PROMPT_FILE)\""
     fi
+    tmux send-keys -t agent "$CMD" Enter
     ;;
   *)
     echo "Unknown AGENT_RUNTIME: $AGENT_RUNTIME" >&2
@@ -55,5 +87,5 @@ case "$AGENT_RUNTIME" in
     ;;
 esac
 
-# 6. Keep container alive
+# ── Keep container alive ───────────────────────────────────────────────────
 exec tail -f /dev/null

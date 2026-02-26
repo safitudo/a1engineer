@@ -53,6 +53,7 @@ services:
       AGENT_RUNTIME: "<%- agent.runtime %>"
       MODEL: "<%- agent.model %>"
       HEARTBEAT_URL: "http://manager:8080/heartbeat/<%- team.id %>/<%- agent.id %>"
+      WORKSPACE: "/git"
       AGENT_PROMPT: <%- JSON.stringify(agent.prompt) %>
 <% Object.entries(agent.env || {}).forEach(function([k, v]) { -%>
       <%- k %>: <%- JSON.stringify(String(v)) %>
