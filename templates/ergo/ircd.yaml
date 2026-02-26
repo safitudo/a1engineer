@@ -1,0 +1,80 @@
+# Ergo IRC server configuration for A1 Engineer agent teams.
+# Internal network only — no TLS, no SASL, open registration.
+
+network:
+    name: a1-engineer
+
+server:
+    name: a1-irc
+
+    listeners:
+        # Listen on all interfaces, plain IRC port — internal Docker network only
+        ":6667": {}
+
+    casemapping: "ascii"
+    enforce-utf8: true
+    lookup-hostnames: false
+    check-ident: false
+
+    # Maximum concurrent client connections
+    max-sendq: 1048576
+
+    # Relaymsg enabled for potential metadata use
+    relaymsg:
+        enabled: true
+        separators: "/"
+
+    # Message tags (IRCv3) enabled
+    message-tags-restricted: false
+
+accounts:
+    # Allow agents to self-register without any verification
+    authentication-enabled: false
+
+    registration:
+        enabled: true
+        allow-before-connect: true
+        throttling:
+            enabled: false
+        bcrypt-cost: 4
+        email-verification:
+            enabled: false
+
+channels:
+    # Allow channel registration so pre-created channels persist across restarts
+    registration:
+        enabled: true
+    default-modes: +nt
+    # Max channels an agent can be in simultaneously
+    max-channels-per-client: 20
+
+history:
+    enabled: true
+    # In-memory history, 1000 messages per channel
+    channel-length: 1000
+    client-length: 100
+    autoresize-window: 0
+    autoreplay-on-join: 0
+    # Enable CHATHISTORY cap so msg CLI can fetch history via CHATHISTORY LATEST
+    chathistory-maxmessages: 1000
+    restrictions:
+        expire-time: 0
+        query-cutoff: 'none'
+
+limits:
+    # Max connected clients across all agent containers
+    clients: 50
+    channels:
+        max: 20
+    registration-messages: 1024
+    nick-length: 32
+    identifier-length: 32
+
+datastore:
+    path: /ircd/data/ircd.db
+
+logging:
+    -
+        method: stderr
+        type: "* -userinput -useroutput"
+        level: warn
