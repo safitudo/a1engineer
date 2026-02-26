@@ -1,5 +1,6 @@
 import express from 'express'
 import { getTeam, updateTeam } from '../store/teams.js'
+import { broadcastHeartbeat } from './ws.js'
 import teamsRouter from './teams.js'
 import agentsRouter from './agents.js'
 import channelsRouter from './channels.js'
@@ -20,6 +21,7 @@ export function createApp() {
       a.id === agentId ? { ...a, last_heartbeat: now } : a
     )
     updateTeam(teamId, { agents })
+    broadcastHeartbeat(teamId, agentId, now)
     console.log(`[heartbeat] team=${teamId} agent=${agentId} at=${now}`)
     return res.json({ ok: true, at: now })
   })

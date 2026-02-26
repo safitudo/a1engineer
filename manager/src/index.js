@@ -3,6 +3,7 @@ import { resolve } from 'path'
 import * as teamStore from './store/teams.js'
 import { startTeam, stopTeam } from './orchestrator/compose.js'
 import { createApp } from './api/index.js'
+import { attachWebSocketServer } from './api/ws.js'
 
 const [, , command, ...rest] = process.argv
 
@@ -72,9 +73,10 @@ async function main() {
     case 'serve': {
       const { port = '8080' } = parseArgs(rest)
       const app = createApp()
-      app.listen(Number(port), () => {
-        console.log(`[manager] REST API listening on :${port}`)
+      const server = app.listen(Number(port), () => {
+        console.log(`[manager] REST API + WebSocket listening on :${port}`)
       })
+      attachWebSocketServer(server)
       break
     }
 
