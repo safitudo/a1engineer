@@ -13,7 +13,14 @@ const TEAMS_DIR = '/tmp/a1-teams'
 
 export async function renderCompose(teamConfig) {
   const template = await readFile(TEMPLATE_PATH, 'utf8')
-  return ejs.render(template, { team: teamConfig })
+  // Pass top-level vars matching the EJS template contract from #8:
+  // team, ergo, repo, agents — not nested under a single key
+  return ejs.render(template, {
+    team: { id: teamConfig.id, name: teamConfig.name },
+    ergo: teamConfig.ergo ?? {},
+    repo: teamConfig.repo ?? {},
+    agents: teamConfig.agents ?? [],
+  })
 }
 
 export async function startTeam(teamConfig) {
