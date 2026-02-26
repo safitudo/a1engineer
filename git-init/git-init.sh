@@ -7,17 +7,17 @@ AGENTS="${AGENTS:-[]}"
 GIT_DIR="/git/repo.git"
 WORKTREES_DIR="/git/worktrees"
 
-# Inject GITHUB_TOKEN into URL if provided
+# Authenticate via ~/.netrc to avoid token in URL (ps aux / git remote -v safe)
 if [ -n "$GITHUB_TOKEN" ]; then
-  # Replace https:// with https://<token>@
-  REPO_URL=$(echo "$REPO_URL" | sed "s|https://|https://${GITHUB_TOKEN}@|")
+  printf 'machine github.com\nlogin x-access-token\npassword %s\n' "$GITHUB_TOKEN" > /root/.netrc
+  chmod 600 /root/.netrc
 fi
 
 # 1. Clone bare repo (idempotent)
 if [ -d "$GIT_DIR" ]; then
   echo "[git-init] Bare repo already exists at $GIT_DIR, skipping clone."
 else
-  echo "[git-init] Cloning $REPO_URL (branch: $REPO_BRANCH) as bare repo..."
+  echo "[git-init] Cloning (branch: $REPO_BRANCH) as bare repo..."
   git clone --bare --branch "$REPO_BRANCH" "$REPO_URL" "$GIT_DIR"
   echo "[git-init] Clone complete."
 fi
