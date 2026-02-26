@@ -69,7 +69,7 @@ async function main() {
     case 'serve': {
       // Start heartbeat server (used when Manager runs as a daemon in Phase 2)
       const { port = '8080' } = parseArgs(rest)
-      createHeartbeatServer(teamStore, Number(port))
+      createHeartbeatServer(Number(port))
       console.log('[manager] heartbeat server running. Ctrl-C to stop.')
       break
     }

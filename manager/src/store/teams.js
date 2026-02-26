@@ -9,10 +9,10 @@ export function createTeam(config) {
     id,
     name: config.name,
     repo: config.repo,
-    agents: (config.agents ?? []).map((a) => ({
+    agents: (config.agents ?? []).map((a, i) => ({
+      id: a.id ?? `${config.name}-${a.role}${i > 0 ? `-${i}` : ''}`,
       role: a.role,
       model: a.model,
-      nick: a.nick ?? `${id.slice(0, 6)}-${a.role}`,
       last_heartbeat: null,
     })),
     apiKeys: config.apiKeys ?? {},

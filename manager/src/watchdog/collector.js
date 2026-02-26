@@ -1,7 +1,7 @@
 import http from 'http'
 import { getTeam, updateTeam } from '../store/teams.js'
 
-export function createHeartbeatServer(store, port = 8080) {
+export function createHeartbeatServer(port = 8080) {
   const server = http.createServer((req, res) => {
     // POST /heartbeat/:teamId/:agentId
     const match = req.url?.match(/^\/heartbeat\/([^/]+)\/([^/]+)$/)
@@ -15,7 +15,7 @@ export function createHeartbeatServer(store, port = 8080) {
       }
       const now = new Date().toISOString()
       const agents = team.agents.map((a) =>
-        a.nick === agentId || a.role === agentId
+        a.id === agentId
           ? { ...a, last_heartbeat: now }
           : a
       )
