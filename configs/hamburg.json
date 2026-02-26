@@ -13,5 +13,10 @@
     { "role": "dev",    "model": "sonnet", "effort": "high" },
     { "role": "qa",     "model": "sonnet", "effort": "high" },
     { "role": "critic", "model": "sonnet", "effort": "high" }
-  ]
+  ],
+  "ergo": {
+    "image": "a1-ergo:latest",
+    "configPath": "./templates/ergo/ircd.yaml",
+    "port": 6667
+  }
 }
