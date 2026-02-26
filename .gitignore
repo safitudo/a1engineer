@@ -1,0 +1,4 @@
+node_modules/
+.chathistory
+*.log
+.DS_Store
