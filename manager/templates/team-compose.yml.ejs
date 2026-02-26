@@ -10,6 +10,15 @@ networks:
 volumes:
   git-<%- team.name %>:
 
+<% const secretNames = Object.keys(secrets || {}) -%>
+<% if (secretNames.length > 0) { -%>
+secrets:
+<% secretNames.forEach(function(name) { -%>
+  <%- name %>:
+    file: <%- secrets[name] %>
+<% }); -%>
+
+<% } -%>
 services:
 
   # ── IRC server ─────────────────────────────────────────────────────────────
@@ -62,6 +71,12 @@ services:
 <% Object.entries(agent.env || {}).forEach(function([k, v]) { -%>
       <%- k %>: <%- JSON.stringify(String(v)) %>
 <% }); -%>
+<% if (secretNames.length > 0) { -%>
+    secrets:
+<% secretNames.forEach(function(name) { -%>
+      - <%- name %>
+<% }); -%>
+<% } -%>
     depends_on:
       ergo-<%- team.name %>:
         condition: service_started

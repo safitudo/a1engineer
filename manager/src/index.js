@@ -1,4 +1,5 @@
 import { readFile } from 'fs/promises'
+import { resolve } from 'path'
 import * as teamStore from './store/teams.js'
 import { startTeam, stopTeam } from './orchestrator/compose.js'
 import { createHeartbeatServer } from './watchdog/collector.js'
@@ -20,16 +21,17 @@ function parseArgs(args) {
 async function main() {
   switch (command) {
     case 'create-team': {
-      const { config: configPath } = parseArgs(rest)
+      const { config: configPath, secrets: secretsArg } = parseArgs(rest)
       if (!configPath) {
-        console.error('Usage: create-team --config <path-to-team.json>')
+        console.error('Usage: create-team --config <path-to-team.json> [--secrets <secrets-dir>]')
         process.exit(1)
       }
       const raw = await readFile(configPath, 'utf8')
       const config = JSON.parse(raw)
+      const secretsDir = secretsArg ? resolve(secretsArg) : null
       const team = teamStore.createTeam(config)
       console.log(`Creating team ${team.id} (${team.name})…`)
-      await startTeam(team)
+      await startTeam(team, secretsDir)
       teamStore.updateTeam(team.id, { status: 'running' })
       console.log(`Team ${team.id} is running.`)
       console.log(JSON.stringify(teamStore.getTeam(team.id), null, 2))

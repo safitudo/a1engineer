@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from 'fs/promises'
+import { readFile, mkdir, writeFile, access } from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
@@ -11,8 +11,30 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE_PATH = join(__dirname, '../../templates/team-compose.yml.ejs')
 const TEAMS_DIR = '/tmp/a1-teams'
 
-export async function renderCompose(teamConfig) {
+// Known Docker secrets: logical name → filename in secretsDir
+const KNOWN_SECRETS = {
+  anthropic_key: 'anthropic_key.txt',
+  github_token: 'github_token.txt',
+}
+
+async function fileExists(p) {
+  try { await access(p); return true } catch { return false }
+}
+
+// Returns { secretName: absoluteFilePath } for secrets present in secretsDir.
+async function resolveSecrets(secretsDir) {
+  if (!secretsDir) return {}
+  const result = {}
+  for (const [name, filename] of Object.entries(KNOWN_SECRETS)) {
+    const filePath = join(secretsDir, filename)
+    if (await fileExists(filePath)) result[name] = filePath
+  }
+  return result
+}
+
+export async function renderCompose(teamConfig, secretsDir = null) {
   const template = await readFile(TEMPLATE_PATH, 'utf8')
+  const secrets = await resolveSecrets(secretsDir)
   // Pass top-level vars matching the EJS template contract from #8:
   // team, ergo, repo, agents — not nested under a single key
   return ejs.render(template, {
@@ -20,11 +42,12 @@ export async function renderCompose(teamConfig) {
     ergo: teamConfig.ergo ?? {},
     repo: teamConfig.repo ?? {},
     agents: teamConfig.agents ?? [],
+    secrets,
   })
 }
 
-export async function startTeam(teamConfig) {
-  const rendered = await renderCompose(teamConfig)
+export async function startTeam(teamConfig, secretsDir = null) {
+  const rendered = await renderCompose(teamConfig, secretsDir)
   const teamDir = join(TEAMS_DIR, teamConfig.id)
   await mkdir(teamDir, { recursive: true })
   const composePath = join(teamDir, 'docker-compose.yml')
