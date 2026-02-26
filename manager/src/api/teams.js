@@ -6,7 +6,7 @@ const router = Router()
 
 // POST /api/teams — create team + spin up compose stack
 router.post('/', async (req, res) => {
-  const { name, repo, agents, apiKeys } = req.body ?? {}
+  const { name, repo, agents, auth } = req.body ?? {}
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'name is required', code: 'MISSING_NAME' })
   }
@@ -20,7 +20,7 @@ router.post('/', async (req, res) => {
     if (!a.role) return res.status(400).json({ error: 'each agent must have a role', code: 'MISSING_AGENT_ROLE' })
   }
 
-  const team = teamStore.createTeam({ name, repo, agents, apiKeys })
+  const team = teamStore.createTeam({ name, repo, agents, auth })
   try {
     await startTeam(team)
     teamStore.updateTeam(team.id, { status: 'running' })
@@ -49,7 +49,7 @@ router.patch('/:id', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
-  const { name, apiKeys } = req.body ?? {}
+  const { name, auth } = req.body ?? {}
   const updates = {}
   if (name !== undefined) {
     if (typeof name !== 'string' || !name.trim()) {
@@ -57,11 +57,11 @@ router.patch('/:id', (req, res) => {
     }
     updates.name = name.trim()
   }
-  if (apiKeys !== undefined) {
-    if (typeof apiKeys !== 'object' || Array.isArray(apiKeys)) {
-      return res.status(400).json({ error: 'apiKeys must be an object', code: 'INVALID_API_KEYS' })
+  if (auth !== undefined) {
+    if (typeof auth !== 'object' || Array.isArray(auth)) {
+      return res.status(400).json({ error: 'auth must be an object', code: 'INVALID_AUTH' })
     }
-    updates.apiKeys = apiKeys
+    updates.auth = auth
   }
 
   const updated = teamStore.updateTeam(req.params.id, updates)

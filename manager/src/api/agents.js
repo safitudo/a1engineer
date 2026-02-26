@@ -88,9 +88,9 @@ router.post('/:agentId/nudge', async (req, res) => {
   const containerName = `agent-${agent.id}`
   try {
     await execFileAsync('docker', [
-      'exec', containerName,
-      'sh', '-c', `printf '%s\\n' ${JSON.stringify(message)} >> /tmp/nudge.txt`,
-    ])
+      'exec', '-i', containerName,
+      'sh', '-c', 'cat >> /tmp/nudge.txt',
+    ], { input: message + '\n' })
     return res.json({ ok: true })
   } catch (err) {
     console.error('[api/agents] nudge failed:', err)
