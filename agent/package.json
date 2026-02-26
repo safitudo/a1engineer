@@ -1,0 +1,16 @@
+{
+  "name": "@a1engineer/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "msg": "./bin/msg.js",
+    "irc-poll": "./bin/irc-poll.js"
+  },
+  "dependencies": {
+    "irc-framework": "^4.13.1"
+  }
+}
