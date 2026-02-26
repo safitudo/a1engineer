@@ -485,16 +485,14 @@ a1engineer/
 - [ ] Manager skeleton: spawn/teardown a single team via CLI + heartbeat — **#9**
 
 ### Phase 2 — Manager API + UI + Multi-tenant
-- [ ] REST API: team CRUD, agent spawn/kill, channel messages
-- [ ] IRC gateway: Manager connects to each team's Ergo, bridges to API
-- [ ] WebSocket stream for real-time monitoring
-- [ ] Dynamic config: add/remove agents and tools at runtime
-- [ ] Nudge dispatch via `docker exec`
-- [ ] **Web UI — Landing page** ("Hire your agent team today"), product marketing, signup CTA
-- [ ] **Web UI — Auth**: login/signup (email + OAuth), session management, JWT tokens
-- [ ] **Web UI — Dashboard**: team list, create team wizard, agent status, live IRC feed per team
-- [ ] **Multi-tenant**: per-tenant isolation in the API, tenant-scoped API keys, team ownership
-- [ ] **Database**: migrate from in-memory store to PostgreSQL for persistent team/tenant state
+- [ ] REST API: team CRUD, agent spawn/kill, channel messages — **#13**
+- [ ] IRC gateway: Manager connects to each team's Ergo, bridges to API — **#14**
+- [ ] WebSocket stream for real-time monitoring — **#15**
+- [ ] **Web UI — Landing page** ("Hire your agent team today"), product marketing, signup CTA — **#16**
+- [ ] **Web UI — Auth**: login/signup (email + OAuth), session management, JWT tokens — **#17**
+- [ ] **Web UI — Dashboard**: team list, create team wizard, agent status, live IRC feed per team — **#18**
+- [ ] **Multi-tenant**: per-tenant isolation in the API, tenant-scoped API keys, team ownership — **#19**
+- [ ] **Database**: migrate from in-memory store to PostgreSQL for persistent team/tenant state — **#20**
 
 ### Phase 3 — Multi-runtime + Tooling
 - [ ] Codex agent variant image
