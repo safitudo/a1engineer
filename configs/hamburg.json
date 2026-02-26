@@ -1,0 +1,17 @@
+{
+  "$schema": "./team-config.schema.json",
+  "name": "hamburg",
+  "repo": {
+    "url": "https://github.com/safitudo/a1engineer.git",
+    "branch": "main"
+  },
+  "agents": [
+    { "role": "arch",   "model": "opus",   "effort": "high" },
+    { "role": "lead",   "model": "opus",   "effort": "high" },
+    { "role": "dev",    "model": "sonnet", "effort": "high" },
+    { "role": "dev",    "model": "sonnet", "effort": "high" },
+    { "role": "dev",    "model": "sonnet", "effort": "high" },
+    { "role": "qa",     "model": "sonnet", "effort": "high" },
+    { "role": "critic", "model": "sonnet", "effort": "high" }
+  ]
+}
