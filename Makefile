@@ -1,7 +1,7 @@
-.PHONY: build build-agent build-agent-claude build-manager build-ergo
+.PHONY: build build-agent build-agent-claude build-manager build-ergo build-git-init
 
 ## Build all images in dependency order
-build: build-agent build-agent-claude build-manager build-ergo
+build: build-agent build-agent-claude build-manager build-ergo build-git-init
 
 ## a1-agent-base: base image for all agent containers
 build-agent:
@@ -18,3 +18,7 @@ build-manager:
 ## a1-ergo: IRC server with bundled config
 build-ergo:
 	docker build -t a1-ergo:latest templates/ergo/
+
+## a1-git-init: one-shot git volume initialiser
+build-git-init:
+	docker build -t a1-git-init:latest git-init/
