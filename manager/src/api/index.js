@@ -1,5 +1,5 @@
 import express from 'express'
-import { getTeam, updateTeam } from '../store/teams.js'
+import { getTeam, touchAgentHeartbeat } from '../store/teams.js'
 import { broadcastHeartbeat } from './ws.js'
 import teamsRouter from './teams.js'
 import agentsRouter from './agents.js'
@@ -17,10 +17,7 @@ export function createApp() {
       return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
     }
     const now = new Date().toISOString()
-    const agents = team.agents.map((a) =>
-      a.id === agentId ? { ...a, last_heartbeat: now } : a
-    )
-    await updateTeam(teamId, { agents })
+    await touchAgentHeartbeat(teamId, agentId)
     broadcastHeartbeat(teamId, agentId, now)
     console.log(`[heartbeat] team=${teamId} agent=${agentId} at=${now}`)
     return res.json({ ok: true, at: now })

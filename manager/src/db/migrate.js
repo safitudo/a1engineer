@@ -1,13 +1,13 @@
 import { readFile, readdir } from 'fs/promises'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { pool } from './pool.js'
+import { getPool } from './pool.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const MIGRATIONS_DIR = join(__dirname, 'migrations')
 
 export async function runMigrations() {
-  const client = await pool.connect()
+  const client = await getPool().connect()
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (

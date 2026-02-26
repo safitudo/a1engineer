@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { pool } from '../db/pool.js'
+import { getPool } from '../db/pool.js'
 
 // PostgreSQL-backed store — Phase 2. Replaced in-memory Map from Phase 1.
 
@@ -50,7 +50,7 @@ export async function createTeam(config) {
   const auth = normalizeAuth(config.auth)
   const repo = config.repo ?? {}
 
-  const client = await pool.connect()
+  const client = await getPool().connect()
   try {
     await client.query('BEGIN')
 
@@ -76,17 +76,17 @@ export async function createTeam(config) {
     client.release()
   }
 
-  return getTeam(id)
+  return await getTeam(id)
 }
 
 export async function getTeam(id) {
-  const { rows: teamRows } = await pool.query(
+  const { rows: teamRows } = await getPool().query(
     'SELECT * FROM teams WHERE id = $1',
     [id]
   )
   if (teamRows.length === 0) return null
 
-  const { rows: agentRows } = await pool.query(
+  const { rows: agentRows } = await getPool().query(
     'SELECT * FROM agents WHERE team_id = $1 ORDER BY id',
     [id]
   )
@@ -94,11 +94,11 @@ export async function getTeam(id) {
 }
 
 export async function listTeams() {
-  const { rows: teamRows } = await pool.query('SELECT * FROM teams ORDER BY created_at')
+  const { rows: teamRows } = await getPool().query('SELECT * FROM teams ORDER BY created_at')
   if (teamRows.length === 0) return []
 
   const ids = teamRows.map((r) => r.id)
-  const { rows: agentRows } = await pool.query(
+  const { rows: agentRows } = await getPool().query(
     'SELECT * FROM agents WHERE team_id = ANY($1) ORDER BY team_id, id',
     [ids]
   )
@@ -110,7 +110,7 @@ export async function listTeams() {
 }
 
 export async function updateTeam(id, updates) {
-  const client = await pool.connect()
+  const client = await getPool().connect()
   try {
     await client.query('BEGIN')
 
@@ -181,7 +181,14 @@ export async function updateTeam(id, updates) {
   return getTeam(id)
 }
 
+export async function touchAgentHeartbeat(teamId, agentId) {
+  await getPool().query(
+    'UPDATE agents SET last_heartbeat = now() WHERE team_id = $1 AND id = $2',
+    [teamId, agentId]
+  )
+}
+
 export async function deleteTeam(id) {
   // ON DELETE CASCADE removes agents automatically
-  await pool.query('DELETE FROM teams WHERE id = $1', [id])
+  await getPool().query('DELETE FROM teams WHERE id = $1', [id])
 }
