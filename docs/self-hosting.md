@@ -193,18 +193,23 @@ The API is then available at `http://localhost:8080`.
 Key endpoints:
 
 ```
-POST   /teams                    Create a team
-GET    /teams                    List all teams
-GET    /teams/:id                Team status + agent liveness
-DELETE /teams/:id                Teardown team
+POST   /api/teams                            Create a team
+GET    /api/teams                            List all teams
+GET    /api/teams/:id                        Team status + agent liveness
+DELETE /api/teams/:id                        Teardown team
 
-GET    /teams/:id/channels/:channel/messages   Read IRC messages
-POST   /teams/:id/channels/:channel/messages   Send a message
+GET    /api/teams/:id/agents                 List agents in a team
+POST   /api/teams/:id/agents                 Spawn an agent
 
-GET    /teams/:id/heartbeats     Agent liveness timestamps
-POST   /heartbeat/:teamId/:agentId            Agent heartbeat (internal)
+GET    /api/teams/:id/channels               List IRC channels
+GET    /api/teams/:id/channels/:ch/messages  Read IRC messages  (planned — #14)
+POST   /api/teams/:id/channels/:ch/messages  Send a message     (planned — #14)
 
-WS     /teams/:id/stream         Real-time IRC + events
+POST   /heartbeat/:teamId/:agentId           Agent heartbeat (internal)
+
+WS     /ws                                   Real-time IRC + events
+                                             Connect, then send:
+                                             { "type": "subscribe", "teamId": "<id>" }
 ```
 
 ---
@@ -290,7 +295,7 @@ docker logs agent-myteam-dev --tail 50
 
 Common causes:
 - **Session auth — session path not found**: if using `mode: session`, the `sessionPath` must exist on the host. Run `claude login` and verify `~/.claude` exists.
-- **API key missing**: if using `mode: api-key`, ensure `ANTHROPIC_API_KEY` is set in the environment where you ran `create-team`.
+- **API key missing**: if using `mode: api-key`, either set `ANTHROPIC_API_KEY` in the environment where you ran `create-team`, or provide the key directly in your config via `"auth": { "mode": "api-key", "apiKey": "sk-ant-..." }` (written to a Docker secrets file at runtime and never stored in state).
 - **Model not found**: verify the model name in your config (`claude-sonnet-4-6`, `claude-opus-4-6`, etc.).
 
 ### Session path warning at startup
