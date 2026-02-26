@@ -5,7 +5,7 @@ network:
     name: a1-engineer
 
 server:
-    name: a1-irc
+    name: a1-irc.local
 
     listeners:
         # Listen on all interfaces, plain IRC port — internal Docker network only
@@ -16,8 +16,8 @@ server:
     lookup-hostnames: false
     check-ident: false
 
-    # Maximum concurrent client connections
-    max-sendq: 1048576
+    # Maximum send queue size per client
+    max-sendq: 1M
 
     # Relaymsg enabled for potential metadata use
     relaymsg:
@@ -62,16 +62,19 @@ history:
         query-cutoff: 'none'
 
 limits:
-    # Max connected clients across all agent containers
-    clients: 50
-    channels:
-        max: 20
-    registration-messages: 1024
-    nick-length: 32
-    identifier-length: 32
+    nicklen: 32
+    identlen: 20
+    realnamelen: 150
+    channellen: 64
+    awaylen: 390
+    kicklen: 390
+    topiclen: 390
+    monitor-entries: 100
+    whowas-entries: 100
+    chan-list-modes: 100
 
 datastore:
-    path: /ircd/data/ircd.db
+    path: /ircd/ircd.db
 
 logging:
     -

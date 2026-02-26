@@ -27,7 +27,7 @@ services:
     volumes:
       - type: bind
         source: <%- ergo.configPath %>
-        target: /ircd/config/ircd.yaml
+        target: /ircd/ircd.yaml
         read_only: true
     restart: unless-stopped
 
