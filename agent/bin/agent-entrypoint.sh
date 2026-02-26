@@ -34,6 +34,10 @@ cat > /root/.claude/settings.json <<'EOF'
 }
 EOF
 
+# ── Inject API keys from Docker secrets (if present) ────────────────────────
+[ -f /run/secrets/anthropic_key ] && export ANTHROPIC_API_KEY=$(cat /run/secrets/anthropic_key)
+[ -f /run/secrets/github_token ]  && export GITHUB_TOKEN=$(cat /run/secrets/github_token)
+
 # ── Role-specific config from filesystem ────────────────────────────────────
 # .context/agents/{role}/config.json → model override
 # .context/agents/{role}/prompt.md   → role prompt (preferred over AGENT_PROMPT)
