@@ -1,10 +1,16 @@
-import { createHash } from 'crypto'
+import { randomUUID, randomBytes, createHash } from 'crypto'
 
 /** @type {Map<string, { id: string, apiKey: string, createdAt: string }>} */
 const tenants = new Map() // keyed by apiKey for fast lookup
 
+// ── BYOK: look up tenant by raw API key ────────────────────────────────────
+
 export function findByApiKey(apiKey) {
-  return tenants.get(apiKey) ?? null
+  // Check BYOK tenants first
+  const byok = tenants.get(apiKey)
+  if (byok) return byok
+  // Check signup tenants by hashed key
+  return getTenantByKeyHash(apiKey)
 }
 
 export function upsertTenant(apiKey) {
@@ -18,6 +24,32 @@ export function upsertTenant(apiKey) {
   return tenant
 }
 
+// ── Signup: create tenant with generated key (key shown once, stored hashed) ─
+
+/** @type {Map<string, { id: string, name: string, email: string, keyHash: string, createdAt: string }>} */
+const signupTenants = new Map() // keyed by tenant id
+
+function hashKey(plaintext) {
+  return createHash('sha256').update(plaintext).digest('hex')
+}
+
+export function createTenant({ name, email }) {
+  const id = randomUUID()
+  const plaintextKey = randomBytes(32).toString('hex')
+  const keyHash = hashKey(plaintextKey)
+  const tenant = { id, name, email, keyHash, createdAt: new Date().toISOString() }
+  signupTenants.set(id, tenant)
+  return { ...tenant, apiKey: plaintextKey }
+}
+
+function getTenantByKeyHash(plaintext) {
+  const hash = hashKey(plaintext)
+  for (const tenant of signupTenants.values()) {
+    if (tenant.keyHash === hash) return tenant
+  }
+  return null
+}
+
 export function listTenants() {
-  return [...tenants.values()]
+  return [...tenants.values(), ...signupTenants.values()]
 }
