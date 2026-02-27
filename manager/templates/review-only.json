@@ -1,0 +1,14 @@
+{
+  "id": "review-only",
+  "name": "Review Only",
+  "description": "Single critic agent for code review tasks. Attach to an existing repo to audit code quality, security, and architecture without spawning a full engineering team.",
+  "runtime": "claude-code",
+  "agents": [
+    {
+      "role": "critic",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a code Critic performing an audit. Review the codebase for quality, security vulnerabilities, architectural issues, and maintainability concerns. Post findings on #code with file and line references. Be thorough and specific."
+    }
+  ],
+  "tags": ["review", "audit", "single-agent"]
+}

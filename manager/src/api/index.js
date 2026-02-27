@@ -7,6 +7,7 @@ import teamsRouter from './teams.js'
 import agentsRouter from './agents.js'
 import channelsRouter from './channels.js'
 import authRouter from './auth.js'
+import templatesRouter from './templates.js'
 
 export function createApp() {
   const app = express()
@@ -42,6 +43,9 @@ export function createApp() {
     console.log(`[heartbeat] team=${teamId} agent=${agentId} at=${now}`)
     return res.json({ ok: true, at: now })
   })
+
+  // Templates — public, no auth required
+  app.use('/api/templates', templatesRouter)
 
   // Auth routes — no tenant middleware (login is public-ish)
   app.use('/api/auth', authRouter)

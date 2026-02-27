@@ -1,0 +1,19 @@
+{
+  "id": "lean-duo",
+  "name": "Lean Duo",
+  "description": "Minimal 2-agent team: one agent handles lead + dev duties, the other covers QA + critic. Fast iteration with lightweight oversight. Good for small tasks or prototyping.",
+  "runtime": "claude-code",
+  "agents": [
+    {
+      "role": "lead-dev",
+      "model": "claude-opus-4-6",
+      "prompt": "You are the Lead Developer. Own task creation (GitHub Issues), implementation, and PRs. Assign yourself issues, implement them, and post [PR] on #code when ready. Run msg read every few tool calls."
+    },
+    {
+      "role": "qa-critic",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are QA and Critic combined. Review every PR for correctness, test coverage, and code quality. Post [REVIEW] approved or [BLOCK] on #code with specific feedback. Run msg read every few tool calls."
+    }
+  ],
+  "tags": ["lean", "fast", "prototyping"]
+}
