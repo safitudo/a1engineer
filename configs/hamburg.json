@@ -6,23 +6,31 @@
     "branch": "main"
   },
   "github": {
-    "appId": "",
-    "installationId": "",
-    "privateKeyPath": "./github-app-key.pem"
+    "appId": "2961489",
+    "installationId": "112766134",
+    "privateKeyPath": "/Users/stanislav/code/ghapp.pem"
+  },
+  "auth": {
+    "mode": "api-key"
   },
   "agents": [
-    { "role": "arch",   "model": "opus",   "effort": "high" },
-    { "role": "lead",   "model": "opus",   "effort": "high" },
-    { "role": "dev",    "model": "sonnet", "effort": "high" },
-    { "role": "dev",    "model": "sonnet", "effort": "high" },
-    { "role": "dev",    "model": "sonnet", "effort": "high" },
-    { "role": "qa",     "model": "sonnet", "effort": "high" },
+    { "role": "arch",   "model": "opus",   "effort": "high", "auth": "session" },
+    { "role": "lead",   "model": "opus",   "effort": "high", "auth": "session" },
+    { "role": "chuck",  "model": "sonnet", "effort": "high", "auth": "session" },
+    { "role": "dev",    "model": "sonnet", "effort": "high", "auth": "session" },
+    { "role": "dev",    "model": "sonnet", "effort": "high", "auth": "session" },
+    { "role": "dev",    "model": "sonnet", "effort": "high", "auth": "session" },
+    { "role": "qa",     "model": "sonnet", "effort": "high", "auth": "session" },
     { "role": "critic", "model": "sonnet", "effort": "high" }
   ],
+  "autoNudge": {
+    "enabled": true,
+    "idleThresholdSeconds": 300
+  },
   "ergo": {
     "image": "a1-ergo:latest",
     "configPath": "./templates/ergo/ircd.yaml",
     "port": 6667,
-    "hostPort": 6667
+    "hostPort": 16667
   }
 }

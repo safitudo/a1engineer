@@ -5,8 +5,10 @@ import { startTeam, stopTeam } from '../orchestrator/compose.js'
 const router = Router()
 
 // POST /api/teams — create team + spin up compose stack
+// Accepts the full team config (same schema as JSON config files)
 router.post('/', async (req, res) => {
-  const { name, repo, agents, auth } = req.body ?? {}
+  const config = req.body ?? {}
+  const { name, repo, agents } = config
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'name is required', code: 'MISSING_NAME' })
   }
@@ -20,9 +22,9 @@ router.post('/', async (req, res) => {
     if (!a.role) return res.status(400).json({ error: 'each agent must have a role', code: 'MISSING_AGENT_ROLE' })
   }
 
-  const team = teamStore.createTeam({ name, repo, agents, auth })
+  const team = teamStore.createTeam(config)
   try {
-    await startTeam(team, { apiKey: auth?.apiKey })
+    await startTeam(team, { apiKey: config.auth?.apiKey })
     teamStore.updateTeam(team.id, { status: 'running' })
     return res.status(201).json(teamStore.getTeam(team.id))
   } catch (err) {

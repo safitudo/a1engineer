@@ -81,8 +81,8 @@ services:
       MODEL: "<%- agent.model %>"
       CLAUDE_CODE_EFFORT_LEVEL: "<%- agent.effort || 'high' %>"
       TEAM_ID: "<%- team.id %>"
-      MANAGER_URL: "http://manager:8080"
-      HEARTBEAT_URL: "http://manager:8080/heartbeat/<%- team.id %>/<%- agent.id %>"
+      MANAGER_URL: "http://host.docker.internal:8080"
+      HEARTBEAT_URL: "http://host.docker.internal:8080/heartbeat/<%- team.id %>/<%- agent.id %>"
       WORKSPACE: "/git"
       AGENT_PROMPT: <%- JSON.stringify(agent.prompt) %>
       WORKTREE_PATH: "/git/worktrees/<%- agent.id %>"
