@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import { dirname } from 'path'
 import { homedir } from 'os'
 import ejs from 'ejs'
+import { resolveGitHubToken } from '../github/app.js'
 
 const execFileAsync = promisify(execFile)
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -37,7 +38,7 @@ async function resolveSecrets(secretsDir) {
   return result
 }
 
-export async function renderCompose(teamConfig, secretsDir = null, apiKey = null) {
+export async function renderCompose(teamConfig, secretsDir = null, apiKey = null, githubToken = null) {
   const auth = teamConfig.auth ?? { mode: 'session', sessionPath: '~/.claude' }
 
   if (!VALID_AUTH_MODES.includes(auth.mode)) {
@@ -60,6 +61,11 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
     }
   }
 
+  // Write GitHub token to secrets dir if available
+  if (secretsDir && githubToken) {
+    await writeFile(join(secretsDir, KNOWN_SECRETS.github_token), githubToken, 'utf8')
+  }
+
   const secrets = await resolveSecrets(secretsDir)
   const template = await readFile(TEMPLATE_PATH, 'utf8')
   return ejs.render(template, {
@@ -70,7 +76,7 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
       port: 6667,
       ...teamConfig.ergo,
     },
-    repo: teamConfig.repo ?? {},
+    repo: { ...teamConfig.repo, githubToken: githubToken || teamConfig.repo?.githubToken },
     agents: teamConfig.agents ?? [],
     auth: authContext,
     secrets,
@@ -82,8 +88,19 @@ export async function startTeam(teamConfig, opts = {}) {
   await mkdir(teamDir, { recursive: true })
   // Auto-create secretsDir for api-key mode so secrets flow works without --secrets flag
   const auth = teamConfig.auth ?? {}
-  const secretsDir = opts.secretsDir ?? (auth.mode === 'api-key' ? teamDir : null)
-  const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null)
+  const secretsDir = opts.secretsDir ?? (auth.mode === 'api-key' || teamConfig.github ? teamDir : null)
+
+  // Resolve GitHub token: App mode (auto-generate) or PAT fallback
+  let githubToken = opts.githubToken ?? null
+  if (!githubToken) {
+    try {
+      githubToken = await resolveGitHubToken(teamConfig)
+    } catch (err) {
+      console.warn(`[compose] GitHub token not available: ${err.message}`)
+    }
+  }
+
+  const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null, githubToken)
   const composePath = join(teamDir, 'docker-compose.yml')
   await writeFile(composePath, rendered, 'utf8')
   await execFileAsync('docker', ['compose', '-f', composePath, 'up', '-d'])

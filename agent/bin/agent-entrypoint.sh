@@ -46,9 +46,18 @@ cat > "$AGENT_HOME/.claude/settings.json" <<'EOF'
 }
 EOF
 
-# ── Inject API keys from Docker secrets (if present) ────────────────────────
+# ── Inject API keys from Docker secrets (if present) ────────────────────
 [ -f /run/secrets/anthropic_key ] && export ANTHROPIC_API_KEY=$(cat /run/secrets/anthropic_key)
 [ -f /run/secrets/github_token ]  && export GITHUB_TOKEN=$(cat /run/secrets/github_token)
+
+# ── Git HTTPS auth via token (GitHub App or PAT) ───────────────────────
+# Uses .netrc so the token never appears in git remote URLs or ps output.
+if [ -n "$GITHUB_TOKEN" ]; then
+  printf 'machine github.com\nlogin x-access-token\npassword %s\n' "$GITHUB_TOKEN" > "$AGENT_HOME/.netrc"
+  chmod 600 "$AGENT_HOME/.netrc"
+  # Also set for root (git-init may have already configured this)
+  cp "$AGENT_HOME/.netrc" /root/.netrc 2>/dev/null || true
+fi
 
 # ── Role-specific config from filesystem ────────────────────────────────────
 # .context/agents/{role}/config.json → model override

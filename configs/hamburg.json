@@ -5,6 +5,11 @@
     "url": "https://github.com/safitudo/a1engineer.git",
     "branch": "main"
   },
+  "github": {
+    "appId": "",
+    "installationId": "",
+    "privateKeyPath": "./github-app-key.pem"
+  },
   "agents": [
     { "role": "arch",   "model": "opus",   "effort": "high" },
     { "role": "lead",   "model": "opus",   "effort": "high" },

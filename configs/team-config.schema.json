@@ -69,6 +69,25 @@
         }
       }
     },
+    "github": {
+      "type": "object",
+      "description": "GitHub App credentials for scoped repo access. If omitted, falls back to GITHUB_TOKEN env var (PAT mode).",
+      "additionalProperties": false,
+      "properties": {
+        "appId": {
+          "type": ["string", "integer"],
+          "description": "GitHub App ID (numeric). Can also be set via GITHUB_APP_ID env var."
+        },
+        "installationId": {
+          "type": ["string", "integer"],
+          "description": "GitHub App Installation ID for the target repo/org. Can also be set via GITHUB_INSTALLATION_ID env var."
+        },
+        "privateKeyPath": {
+          "type": "string",
+          "description": "Path to the GitHub App private key PEM file. Can also be set via GITHUB_APP_PRIVATE_KEY_PATH env var."
+        }
+      }
+    },
     "ergo": {
       "type": "object",
       "description": "Optional Ergo IRC server configuration. Defaults are sufficient for local dev.",

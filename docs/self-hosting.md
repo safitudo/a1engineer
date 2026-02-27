@@ -130,6 +130,94 @@ You may also pass a per-team key with `--secrets <dir>` (see §5 below).
 
 > **Note**: Session auth is the default when `auth` is omitted from the config.
 
+### GitHub App authentication (recommended)
+
+Use a GitHub App for scoped, short-lived repo access instead of personal tokens. Agents get 1-hour tokens that auto-expire, scoped to a single repo with only the permissions they need.
+
+#### Create the GitHub App
+
+1. Go to **https://github.com/settings/apps** → **New GitHub App**
+2. Fill in:
+   - **Name**: `A1 Engineer` (or any name)
+   - **Homepage URL**: `https://github.com/safitudo/a1engineer`
+   - **Webhook**: uncheck "Active" (not needed)
+3. Set **Repository permissions**:
+   - **Contents**: Read & Write (clone, push branches)
+   - **Pull requests**: Read & Write (create PRs, comment)
+   - **Issues**: Read & Write (create/update/close issues)
+   - **Metadata**: Read (auto-granted)
+   - Everything else: **No access**
+4. Set **Where can this app be installed?**: "Only on this account"
+5. Click **Create GitHub App**
+6. Note the **App ID** shown on the next page
+
+#### Generate a private key
+
+1. On the App settings page, scroll to **Private keys**
+2. Click **Generate a private key** — a `.pem` file downloads
+3. Move it to your project root:
+   ```bash
+   mv ~/Downloads/your-app-name.*.pem ./github-app-key.pem
+   ```
+   This file is gitignored (`*.pem` in `.gitignore`).
+
+#### Install the App on your repo
+
+1. On the App settings page, click **Install App** in the left sidebar
+2. Select your account → **Only select repositories** → pick the repo
+3. Click **Install**
+4. Note the **Installation ID** from the URL: `https://github.com/settings/installations/{INSTALLATION_ID}`
+
+#### Configure
+
+Add to your `.env`:
+
+```bash
+GITHUB_APP_ID=123456
+GITHUB_INSTALLATION_ID=78901234
+GITHUB_APP_PRIVATE_KEY_PATH=./github-app-key.pem
+```
+
+Or add to your team config:
+
+```json
+"github": {
+  "appId": "123456",
+  "installationId": "78901234",
+  "privateKeyPath": "./github-app-key.pem"
+}
+```
+
+The Manager auto-generates a 1-hour installation token at team creation and injects it into agent containers via Docker secrets. Agents use it for `git clone`, `git push`, and `gh` CLI operations via `.netrc` — the token never appears in URLs or process listings.
+
+#### Set up branch protection
+
+Go to your repo → **Settings** → **Rules** → **Rulesets** → **New ruleset**:
+
+| Setting | Value |
+|---|---|
+| Name | `protect-main` |
+| Target | Default branch (`main`) |
+| Bypass list | Only your GitHub username |
+
+Enable these rules:
+- Require a pull request before merging
+- Require 1 approval
+- Block force pushes
+- Block deletions
+
+This ensures agents can only push to `agent/*` branches and must go through PRs to merge into `main`.
+
+#### Fallback: Personal Access Token
+
+If you prefer not to use a GitHub App, set a fine-grained PAT:
+
+```bash
+export GITHUB_TOKEN=github_pat_...
+```
+
+The Manager falls back to `GITHUB_TOKEN` when no `github` section is in the team config. Create the PAT at `github.com/settings/personal-access-tokens/new`, scoped to your repo with Contents + Pull requests + Issues permissions.
+
 ---
 
 ## 5. Start a Team
