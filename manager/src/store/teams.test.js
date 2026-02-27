@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { createTeam, getTeam, listTeams, updateTeam, deleteTeam } from './teams.js'
+import { createTeam, getTeam, listTeams, updateTeam, deleteTeam, restoreTeam, findByInternalToken } from './teams.js'
 
 afterEach(() => {
   for (const team of listTeams()) deleteTeam(team.id)
@@ -149,5 +149,33 @@ describe('deleteTeam', () => {
 
   it('is a no-op for nonexistent id', () => {
     expect(() => deleteTeam('missing')).not.toThrow()
+  })
+})
+
+describe('MANAGER_TOKEN — internalToken', () => {
+  it('createTeam generates a 64-char hex internalToken', () => {
+    const team = createTeam({ name: 'test', agents: [] })
+    expect(team.internalToken).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('findByInternalToken returns team matching token', () => {
+    const team = createTeam({ name: 'test', agents: [] })
+    expect(findByInternalToken(team.internalToken)).toEqual(team)
+  })
+
+  it('findByInternalToken returns null for unknown token', () => {
+    expect(findByInternalToken('unknown-token')).toBeNull()
+  })
+
+  it('restoreTeam backfills internalToken when missing from old meta', () => {
+    restoreTeam({ id: 'legacy-1', name: 'legacy', agents: [], status: 'running' })
+    const team = getTeam('legacy-1')
+    expect(team.internalToken).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('restoreTeam preserves existing internalToken', () => {
+    const token = 'a'.repeat(64)
+    restoreTeam({ id: 'legacy-2', name: 'existing', agents: [], status: 'running', internalToken: token })
+    expect(getTeam('legacy-2').internalToken).toBe(token)
   })
 })

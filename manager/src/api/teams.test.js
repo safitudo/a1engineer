@@ -60,6 +60,35 @@ function post(port, path, body) { return request(port, 'POST', path, body) }
 function patch(port, path, body) { return request(port, 'PATCH', path, body) }
 function del(port, path) { return request(port, 'DELETE', path) }
 
+function requestWithToken(port, method, path, token, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null
+    const opts = {
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    }
+    const req = http.request(opts, (res) => {
+      let data = ''
+      res.on('data', (c) => { data += c })
+      res.on('end', () => {
+        let parsed
+        try { parsed = JSON.parse(data) } catch { parsed = data }
+        resolve({ status: res.statusCode, body: parsed })
+      })
+    })
+    req.on('error', reject)
+    if (payload) req.write(payload)
+    req.end()
+  })
+}
+
 function requestNoAuth(port, method, path, body) {
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : null
@@ -527,5 +556,56 @@ describe('catch-all', () => {
     const res = await get(port, '/api/unknown-route')
     expect(res.status).toBe(404)
     expect(res.body.code).toBe('NOT_FOUND')
+  })
+})
+
+// ── MANAGER_TOKEN — internal token auth path ──────────────────────────────────
+
+describe('MANAGER_TOKEN auth', () => {
+  it('agent can GET its own team using internalToken', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const { id, internalToken } = created.body
+    const res = await requestWithToken(port, 'GET', `/api/teams/${id}`, internalToken)
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(id)
+  })
+
+  it('agent cannot GET a different team (403)', async () => {
+    const t1 = await post(port, '/api/teams', VALID_TEAM)
+    const t2 = await post(port, '/api/teams', { ...VALID_TEAM, name: 'other-team' })
+    const res = await requestWithToken(port, 'GET', `/api/teams/${t2.body.id}`, t1.body.internalToken)
+    expect(res.status).toBe(403)
+    expect(res.body.code).toBe('FORBIDDEN')
+  })
+
+  it('agent can GET its own team overview', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const { id, internalToken } = created.body
+    const res = await requestWithToken(port, 'GET', `/api/teams/${id}/overview`, internalToken)
+    expect(res.status).toBe(200)
+    expect(res.body.teamId).toBe(id)
+  })
+
+  it('POST /api/teams returns 403 for teamScope tokens (privilege escalation)', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const res = await requestWithToken(port, 'POST', '/api/teams', created.body.internalToken, VALID_TEAM)
+    expect(res.status).toBe(403)
+    expect(res.body.code).toBe('FORBIDDEN')
+  })
+
+  it('POST /api/teams/rehydrate returns 403 for teamScope tokens', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const res = await requestWithToken(port, 'POST', '/api/teams/rehydrate', created.body.internalToken)
+    expect(res.status).toBe(403)
+    expect(res.body.code).toBe('FORBIDDEN')
+  })
+
+  it('GET /api/teams returns only own team for teamScope token', async () => {
+    const t1 = await post(port, '/api/teams', VALID_TEAM)
+    await post(port, '/api/teams', { ...VALID_TEAM, name: 'other-team' })
+    const res = await requestWithToken(port, 'GET', '/api/teams', t1.body.internalToken)
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveLength(1)
+    expect(res.body[0].id).toBe(t1.body.id)
   })
 })
