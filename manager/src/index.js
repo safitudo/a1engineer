@@ -43,15 +43,36 @@ function parseArgs(args) {
 async function main() {
   switch (command) {
     case 'create-team': {
-      const { config: configPath, secrets: secretsArg } = parseArgs(rest)
+      const { config: configPath, secrets: secretsArg, port = '8080' } = parseArgs(rest)
       if (!configPath) {
         console.error('Usage: create-team --config <path-to-team.json> [--secrets <secrets-dir>]')
         process.exit(1)
       }
       const raw = await readFile(configPath, 'utf8')
       const config = JSON.parse(raw)
+
+      // Try the running Manager API first — so it stays aware of the team
+      const managerUrl = `http://localhost:${port}/api/teams`
+      try {
+        const resp = await fetch(managerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: raw,
+        })
+        if (resp.ok) {
+          const team = await resp.json()
+          console.log(`Team ${team.id} (${team.name}) created via Manager API.`)
+          console.log(JSON.stringify(team, null, 2))
+          break
+        }
+        console.error(`Manager API returned ${resp.status}, falling back to direct mode…`)
+      } catch {
+        console.error(`Manager not reachable at ${managerUrl}, using direct mode…`)
+      }
+
+      // Fallback: direct mode (Manager won't know about this team)
       const secretsDir = secretsArg ? resolve(secretsArg) : null
-      const apiKey = config.auth?.apiKey ?? null  // grab before createTeam/normalizeAuth strips it
+      const apiKey = config.auth?.apiKey ?? null
       const team = teamStore.createTeam(config)
       console.log(`Creating team ${team.id} (${team.name})…`)
       await startTeam(team, { secretsDir, apiKey })
@@ -62,12 +83,22 @@ async function main() {
     }
 
     case 'destroy-team': {
-      const { id } = parseArgs(rest)
+      const { id, port = '8080' } = parseArgs(rest)
       if (!id) {
         console.error('Usage: destroy-team --id <team-id>')
         process.exit(1)
       }
-      // Check compose file exists on disk (works across processes)
+
+      // Try Manager API first
+      try {
+        const resp = await fetch(`http://localhost:${port}/api/teams/${id}`, { method: 'DELETE' })
+        if (resp.ok || resp.status === 204) {
+          console.log(`Team ${id} destroyed via Manager API.`)
+          break
+        }
+      } catch { /* Manager not running — fall through */ }
+
+      // Fallback: direct mode
       const composePath = join(TEAMS_DIR, id, 'docker-compose.yml')
       try { await access(composePath) } catch {
         console.error(`Team not found: ${id} (no compose file at ${composePath})`)
@@ -75,7 +106,7 @@ async function main() {
       }
       console.log(`Stopping team ${id}…`)
       await stopTeam(id)
-      teamStore.deleteTeam(id)  // no-op if not in memory, but harmless
+      teamStore.deleteTeam(id)
       console.log(`Team ${id} destroyed.`)
       break
     }
