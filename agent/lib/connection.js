@@ -15,10 +15,16 @@ export function connect(cfg, opts = {}) {
       reject(new Error('IRC connect timeout'))
     }, timeout)
 
+    // Request IRCv3 caps required for CHATHISTORY
+    client.requestCap(['draft/chathistory', 'batch', 'message-tags', 'server-time'])
+
     client.connect({
       host: cfg.host,
       port: cfg.port,
       nick: cfg.nick,
+      username: cfg.nick,
+      gecos: `${cfg.nick} agent`,
+      auto_reconnect: false,
     })
 
     client.on('registered', () => {

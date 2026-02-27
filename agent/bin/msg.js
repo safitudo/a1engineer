@@ -31,82 +31,75 @@ async function sendMessage(channel, text) {
 async function readMessages(channel) {
   const channels = channel ? [channel] : config.channels
   const client = await connect({ ...config, channels })
-  const history = await loadHistory()
-  const results = new Map()
+  const cursors = await loadHistory()
+  const results = new Map(channels.map((ch) => [ch, []]))
 
-  for (const ch of channels) {
-    results.set(ch, [])
-  }
-
-  // Request CHATHISTORY for each channel
+  // Fetch CHATHISTORY using batch events from command_handler
   await new Promise((resolve) => {
-    let pending = channels.length
+    const pending = new Set(channels)
+    let resolved = false
 
-    client.on('batch end', (batch) => {
-      if (batch.type === 'chathistory') {
-        const msgs = (batch.messages || []).map((m) => ({
-          time: m.tags?.time || new Date().toISOString(),
-          nick: m.nick,
-          text: m.params?.[1] || m.message || '',
-          channel: m.target || m.params?.[0],
-        }))
-        for (const msg of msgs) {
-          const ch = msg.channel
-          if (results.has(ch)) {
-            results.get(ch).push(msg)
-          }
-        }
-        pending--
-        if (pending <= 0) resolve()
+    const done = () => {
+      if (resolved) return
+      resolved = true
+      client.command_handler.removeListener('batch end chathistory', handler)
+      resolve()
+    }
+
+    const handler = (batch) => {
+      const ch = batch.params[0]
+      if (!pending.has(ch)) return
+
+      const messages = []
+      for (const cmd of batch.commands) {
+        if (cmd.command !== 'PRIVMSG') continue
+        if (cmd.nick === 'HistServ') continue
+        messages.push({
+          ts: cmd.getTag('time') || new Date().toISOString(),
+          nick: cmd.nick,
+          text: cmd.params[cmd.params.length - 1],
+          msgid: cmd.getTag('msgid') || null,
+        })
       }
-    })
+      results.set(ch, messages)
+      pending.delete(ch)
+      if (pending.size === 0) done()
+    }
+
+    client.command_handler.on('batch end chathistory', handler)
 
     for (const ch of channels) {
-      const since = history[ch]
-      const ref = since ? `timestamp=${since}` : '*'
-      client.raw(`CHATHISTORY LATEST ${ch} ${ref} 50`)
-    }
-
-    // Fallback if no batch events fire
-    setTimeout(resolve, 3000)
-  })
-
-  // Filter to only new messages and print
-  const now = new Date().toISOString()
-  let hasOutput = false
-
-  for (const [ch, msgs] of results) {
-    const since = history[ch]
-    const newMsgs = since
-      ? msgs.filter((m) => m.time > since)
-      : msgs
-
-    if (newMsgs.length > 0) {
-      hasOutput = true
-      console.log(`── ${ch} (${newMsgs.length} new) ──`)
-      for (const m of newMsgs) {
-        const ts = new Date(m.time).toLocaleTimeString('en-GB', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        })
-        console.log(`  [${ts}] <${m.nick}> ${m.text}`)
+      const cursor = cursors[ch]
+      if (cursor?.msgid) {
+        client.raw(`CHATHISTORY AFTER ${ch} msgid=${cursor.msgid} 500`)
+      } else {
+        client.raw(`CHATHISTORY LATEST ${ch} * 500`)
       }
     }
 
-    // Update history to latest timestamp
+    setTimeout(done, 500)
+  })
+
+  let totalNew = 0
+
+  for (const [ch, msgs] of results) {
     if (msgs.length > 0) {
-      history[ch] = msgs[msgs.length - 1].time
-    } else if (!history[ch]) {
-      history[ch] = now
+      console.log(`\n── ${ch} (${msgs.length} new) ──`)
+      for (const m of msgs) {
+        const time = m.ts ? m.ts.replace(/.*T/, '').replace(/\.\d+Z/, '') : '??:??'
+        console.log(`  [${time}] <${m.nick}> ${m.text}`)
+      }
+      const last = msgs[msgs.length - 1]
+      cursors[ch] = { msgid: last.msgid, ts: last.ts }
+      totalNew += msgs.length
     }
   }
 
-  if (!hasOutput) {
+  if (totalNew === 0) {
     console.log('No new messages.')
   }
 
-  await saveHistory(history)
+  await saveHistory(cursors)
   await disconnect(client)
 }
 

@@ -22,73 +22,70 @@ async function saveHistory(history) {
 
 async function poll() {
   const client = await connect(config, { timeout: POLL_TIMEOUT })
-  const history = await loadHistory()
-  const results = new Map()
+  const cursors = await loadHistory()
+  const results = new Map(config.channels.map((ch) => [ch, []]))
 
-  for (const ch of config.channels) {
-    results.set(ch, [])
-  }
-
+  // Fetch CHATHISTORY using command_handler batch events
   await new Promise((resolve) => {
-    let pending = config.channels.length
+    const pending = new Set(config.channels)
+    let resolved = false
 
-    client.on('batch end', (batch) => {
-      if (batch.type === 'chathistory') {
-        const msgs = (batch.messages || []).map((m) => ({
-          time: m.tags?.time || new Date().toISOString(),
-          nick: m.nick,
-          text: m.params?.[1] || m.message || '',
-          channel: m.target || m.params?.[0],
-        }))
-        for (const msg of msgs) {
-          const ch = msg.channel
-          if (results.has(ch)) {
-            results.get(ch).push(msg)
-          }
-        }
-        pending--
-        if (pending <= 0) resolve()
-      }
-    })
-
-    for (const ch of config.channels) {
-      const since = history[ch]
-      const ref = since ? `timestamp=${since}` : '*'
-      client.raw(`CHATHISTORY LATEST ${ch} ${ref} 50`)
+    const done = () => {
+      if (resolved) return
+      resolved = true
+      client.command_handler.removeListener('batch end chathistory', handler)
+      resolve()
     }
 
-    setTimeout(resolve, 1000)
+    const handler = (batch) => {
+      const ch = batch.params[0]
+      if (!pending.has(ch)) return
+
+      const messages = []
+      for (const cmd of batch.commands) {
+        if (cmd.command !== 'PRIVMSG') continue
+        if (cmd.nick === 'HistServ') continue
+        messages.push({
+          ts: cmd.getTag('time') || new Date().toISOString(),
+          nick: cmd.nick,
+          text: cmd.params[cmd.params.length - 1],
+          msgid: cmd.getTag('msgid') || null,
+        })
+      }
+      results.set(ch, messages)
+      pending.delete(ch)
+      if (pending.size === 0) done()
+    }
+
+    client.command_handler.on('batch end chathistory', handler)
+
+    for (const ch of config.channels) {
+      const cursor = cursors[ch]
+      if (cursor?.msgid) {
+        client.raw(`CHATHISTORY AFTER ${ch} msgid=${cursor.msgid} 500`)
+      } else {
+        client.raw(`CHATHISTORY LATEST ${ch} * 500`)
+      }
+    }
+
+    setTimeout(done, 500)
   })
 
-  const now = new Date().toISOString()
   const lines = []
 
   for (const [ch, msgs] of results) {
-    const since = history[ch]
-    const newMsgs = since
-      ? msgs.filter((m) => m.time > since)
-      : msgs
-
-    if (newMsgs.length > 0) {
-      lines.push(`── ${ch} (${newMsgs.length} new) ──`)
-      for (const m of newMsgs) {
-        const ts = new Date(m.time).toLocaleTimeString('en-GB', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        })
-        lines.push(`  [${ts}] <${m.nick}> ${m.text}`)
-      }
-    }
-
     if (msgs.length > 0) {
-      history[ch] = msgs[msgs.length - 1].time
-    } else if (!history[ch]) {
-      history[ch] = now
+      lines.push(`── ${ch} (${msgs.length} new) ──`)
+      for (const m of msgs) {
+        const time = m.ts ? m.ts.replace(/.*T/, '').replace(/\.\d+Z/, '') : '??:??'
+        lines.push(`  [${time}] <${m.nick}> ${m.text}`)
+      }
+      const last = msgs[msgs.length - 1]
+      cursors[ch] = { msgid: last.msgid, ts: last.ts }
     }
   }
 
-  await saveHistory(history)
+  await saveHistory(cursors)
   await disconnect(client)
 
   // PostToolUse hooks require JSON with additionalContext to be visible to the agent
