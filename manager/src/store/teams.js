@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto'
+import { randomUUID, randomBytes } from 'crypto'
 
 // In-memory store — Phase 1 only. Graduated to SQLite/Postgres in Phase 2.
 
@@ -21,6 +21,7 @@ export function createTeam(config, { tenantId = null } = {}) {
   const team = {
     id,
     tenantId,
+    internalToken: randomBytes(32).toString('hex'),
     name: config.name,
     repo: config.repo,
     github: config.github ?? null,
@@ -72,4 +73,11 @@ export function deleteTeam(id) {
 export function restoreTeam(team) {
   store.set(team.id, team)
   return team
+}
+
+export function findByInternalToken(token) {
+  for (const team of store.values()) {
+    if (team.internalToken === token) return team
+  }
+  return null
 }
