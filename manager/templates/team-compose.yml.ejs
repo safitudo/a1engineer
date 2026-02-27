@@ -24,6 +24,10 @@ services:
     image: <%- ergo.image %>
     networks:
       - net-<%- team.name %>
+<% if (ergo.hostPort) { -%>
+    ports:
+      - "<%- ergo.hostPort %>:<%- ergo.port || 6667 %>"
+<% } -%>
     volumes:
       - type: bind
         source: <%- ergo.configPath %>
