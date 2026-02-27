@@ -111,12 +111,16 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **Tenant Auth Middleware** (`manager/src/middleware/auth.js`) — Bearer token auth on all /api/teams routes, BYOK auto-provisioning via upsertTenant, heartbeat endpoint exempt
 - **Tenant Store** (`manager/src/store/tenants.js`) — In-memory Map, same pattern as teams.js
 - **Auth Endpoints** (`manager/src/api/auth.js`) — POST /api/auth/login validates Bearer token
-- **WebSocket Auth** — WS upgrade validates API key via ?token= query param, tenant scoping on subscribe
+- **WebSocket Auth** — First-message auth protocol (token in WS frame, not URL). findByApiKey rejects unknown keys
 - **IRC Channel Send** — POST /channels/:name/messages now works (was 501 stub), uses IrcGateway.say()
+- **Team Store Rehydration** — Writes team-meta.json on create, scans TEAMS_DIR on startup to rebuild store. POST /api/teams/rehydrate endpoint
+- **Signup Flow** — POST /api/auth/signup with randomUUID tenant + hashed key storage
+- **Playwright E2E Tests** — Login, dashboard, wizard flows (web/e2e/)
 
 **Tests**
-- 81 unit/integration tests passing
+- 98 unit/integration tests passing (7 test files)
 - Test mocks for IRC gateway and router (prevent real TCP connections)
+- WS auth handshake coverage (auth/UNAUTHENTICATED/MISSING_TOKEN paths)
 
 ### Architecture Decisions
 - **BYOK (Bring Your Own Key)** — Users provide their own API keys, no managed billing
@@ -128,35 +132,25 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 
 ### What's Remaining (Priority Order)
 
-**P0 — Chuck Hotfix (blocks all agent orchestration)**
-1. **#61 Team store rehydration** — In-memory team store loses state on Manager restart. Chuck gets 404 for all teams. Fix: write `team-meta.json` at create time, scan `TEAMS_DIR` on startup to rebuild store, add `POST /api/teams/rehydrate` endpoint. Assigned to arch.
-2. **Chuck CLI auth header** — `agent/bin/chuck` doesn't send Authorization header. Add `API_KEY` env var to request headers (~2 lines). Bundled with #61.
+**P0 — DONE** ~~#61 Team store rehydration~~ — Merged. team-meta.json written on create, TEAMS_DIR scanned on startup.
+**P1 — DONE** ~~#62 Tenant ID collision~~ — Fixed via sha256(fullApiKey). ~~#63 WS auth bypass~~ — Fixed: findByApiKey rejects unknown keys. ~~#64 API key in WS URL~~ — Fixed: first-message auth protocol.
 
-**P1 — Security (3 blocks from Critic)**
-3. **#62 Tenant ID collision** — `apiKey.slice(0,12)` is identical for all Anthropic keys (`sk-ant-api03`). All tenants share same ID. Fix: `crypto.randomUUID()` with separate lookup table.
-4. **#63 WS auth bypass** — `upsertTenant()` never returns null, so any `?token=` passes auth. Fix: validate against existing tenants only on WS connect, don't auto-create.
-5. **#64 API key in WS URL** — Raw API key in `?token=` query param visible in logs/devtools. Fix: short-lived opaque WS token.
-
-**P2 — Features**
-6. **#57 Signup page** — PR #60 submitted, needs rework (duplicates existing files). May be unnecessary in BYOK model (login auto-provisions). Under review.
-7. ~~**Channels API gap**~~ — Already implemented. GET /:name/messages works. Confirmed by Critic.
-8. **#59 Playwright E2E tests** — Assigned to dev-3. Setup + login/dashboard/wizard flows.
-9. **Phase 3 AgentConsole** — Interactive terminal via xterm.js (currently read-only polling)
-10. **IRC client URL for users** — Expose Ergo IRC server connection details in UI
+**P2 — In Progress**
+1. **Phase 3 AgentConsole Backend** — WS handlers: console.attach/input/detach/resize via existing /ws. Assigned to dev-4.
+2. **Phase 3 AgentConsole Frontend** — xterm.js replacing polling AgentConsole. Assigned to dev-3. Depends on backend.
+3. **IRC client URL for users** — Expose Ergo connection details in team detail UI. Assigned to dev-5.
+4. **PR #50 PostgreSQL store** — Blocked: tests need async update. Parked.
 
 ### Current Assignments
 | Agent | Issue | Task | Status |
 |-------|-------|------|--------|
-| arch | #61 | Team store rehydration + chuck CLI auth | In progress |
-| dev-3 | #59 | Playwright E2E tests | In progress |
-| dev-4 | #57 | Signup page (PR #60 needs rework) | Rework needed |
-| dev-5 | — | Available (reassigned from #58, done) | Available |
-| critic-7 | — | Reviewing PRs, filed 3 security blocks | Reviewing |
-| qa-6 | — | Testing PRs, monitoring | Monitoring |
+| arch | — | Architecture, reviewing | Available |
+| dev-3 | — | AgentConsole Phase 3 Frontend (xterm.js) | Assigned |
+| dev-4 | — | AgentConsole Phase 3 Backend (WS handlers) | Assigned |
+| dev-5 | — | IRC connection details in UI | Assigned |
+| critic-7 | — | Reviewing PRs | Monitoring |
+| qa-6 | — | Testing, monitoring | Monitoring |
 
 ### Known Issues
-- `chuck screen/nudge/directive` return EXEC_ERROR — root cause: in-memory team store loses state on Manager restart (NOT docker socket issue). Fix in progress (#61)
-- Tenant ID collision makes multi-tenancy broken for Anthropic keys (#62)
-- WebSocket auth is effectively unauthenticated (#63)
-- API keys leaked in WebSocket URLs (#64)
 - GitHub token expiration blocked pushes mid-sprint (resolved by Stanislav)
+- PR #50 (PostgreSQL) blocked — tests use sync API but store is async
