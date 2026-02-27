@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import { resolve, join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import * as teamStore from './store/teams.js'
+import { TEAMS_DIR } from './constants.js'
 
 // ── Load .env from project root ──────────────────────────────────────────────
 const __dirname_idx = dirname(fileURLToPath(import.meta.url))
@@ -23,8 +24,6 @@ import { startTeam, stopTeam } from './orchestrator/compose.js'
 import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'
 import { startNudger } from './watchdog/nudger.js'
-
-const TEAMS_DIR = '/tmp/a1-teams'
 
 const [, , command, ...rest] = process.argv
 

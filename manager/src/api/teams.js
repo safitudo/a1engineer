@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import * as teamStore from '../store/teams.js'
 import { startTeam, stopTeam } from '../orchestrator/compose.js'
+import { createGateway, destroyGateway } from '../irc/gateway.js'
+import { routeMessage, clearTeamBuffers } from '../irc/router.js'
 
 const router = Router()
 
@@ -26,6 +28,7 @@ router.post('/', async (req, res) => {
   try {
     await startTeam(team, { apiKey: config.auth?.apiKey })
     teamStore.updateTeam(team.id, { status: 'running' })
+    createGateway(team, { onMessage: routeMessage })
     return res.status(201).json(teamStore.getTeam(team.id))
   } catch (err) {
     teamStore.deleteTeam(team.id)
@@ -112,12 +115,14 @@ router.delete('/:id', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
+  destroyGateway(req.params.id)
   try {
     await stopTeam(req.params.id)
   } catch (err) {
     console.error('[api/teams] stopTeam failed:', err)
     // Still remove from store — compose may already be gone
   }
+  clearTeamBuffers(req.params.id)
   teamStore.deleteTeam(req.params.id)
   res.status(204).end()
 })

@@ -2,9 +2,9 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
 import * as teamStore from '../store/teams.js'
+import { TEAMS_DIR } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
-const TEAMS_DIR = '/tmp/a1-teams'
 
 const DEFAULT_IDLE_THRESHOLD = 300 // 5 min
 const DEFAULT_NUDGE_MSG = 'continue. check IRC with msg read, then resume your current task.'

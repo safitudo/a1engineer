@@ -6,11 +6,11 @@ import { fileURLToPath } from 'url'
 import { homedir } from 'os'
 import ejs from 'ejs'
 import { resolveGitHubToken } from '../github/app.js'
+import { TEAMS_DIR } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE_PATH = join(__dirname, '../../templates/team-compose.yml.ejs')
-const TEAMS_DIR = '/tmp/a1-teams'
 
 const DEFAULT_ERGO_IMAGE = 'a1-ergo:latest'
 const DEFAULT_ERGO_CONFIG = join(__dirname, '../../../templates/ergo/ircd.yaml')

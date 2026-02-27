@@ -4,9 +4,9 @@ import { promisify } from 'util'
 import { join } from 'path'
 import * as teamStore from '../store/teams.js'
 import { startTeam } from '../orchestrator/compose.js'
+import { TEAMS_DIR } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
-const TEAMS_DIR = '/tmp/a1-teams'
 
 function composeFile(teamId) {
   return join(TEAMS_DIR, teamId, 'docker-compose.yml')

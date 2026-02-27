@@ -1,14 +1,11 @@
 import { Router } from 'express'
 import * as teamStore from '../store/teams.js'
+import { readMessages } from '../irc/router.js'
 
 const router = Router({ mergeParams: true })
 
-// Channels API depends on IRC gateway (#14 — not yet implemented).
-// These endpoints return 501 until the gateway is wired in.
-// Once gateway.js is available, replace the stub body with gateway calls.
-
 const GATEWAY_NOT_READY = {
-  error: 'IRC gateway not yet available — depends on issue #14',
+  error: 'IRC gateway send not yet implemented',
   code: 'GATEWAY_NOT_READY',
 }
 
@@ -33,7 +30,10 @@ router.get('/', (req, res) => {
 router.get('/:name/messages', (req, res) => {
   const team = requireTeam(req, res)
   if (!team) return
-  res.status(501).json(GATEWAY_NOT_READY)
+  const limit = Number(req.query.limit) || 100
+  const since = req.query.since || undefined
+  const channel = `#${req.params.name}`
+  res.json(readMessages(team.id, channel, { limit, since }))
 })
 
 // POST /api/teams/:id/channels/:name/messages — send message (via IRC gateway)
