@@ -189,6 +189,7 @@ export async function rehydrateTeams(restoreTeam) {
       const meta = JSON.parse(raw)
       // Ensure agents have last_heartbeat field
       meta.agents = (meta.agents ?? []).map(a => ({ ...a, last_heartbeat: a.last_heartbeat ?? null }))
+      meta.tenantId = null // clear — tenant store is in-memory, IDs won't match after restart
       meta.updatedAt = new Date().toISOString()
       restoreTeam(meta)
       restored.push(meta.id)

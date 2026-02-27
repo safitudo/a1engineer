@@ -46,8 +46,12 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  // Auto-adopt rehydrated teams (tenantId was cleared on restore)
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
   }
   res.json(team)
 })
@@ -56,8 +60,11 @@ router.get('/:id', (req, res) => {
 router.patch('/:id', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
   }
 
   const { name, auth } = req.body ?? {}
@@ -83,8 +90,11 @@ router.patch('/:id', (req, res) => {
 router.get('/:id/overview', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
   }
 
   const now = Date.now()
@@ -142,7 +152,7 @@ router.post('/rehydrate', async (_req, res) => {
 router.delete('/:id', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   }
 
