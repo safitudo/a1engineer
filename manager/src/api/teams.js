@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import * as teamStore from '../store/teams.js'
-import { startTeam, stopTeam } from '../orchestrator/compose.js'
+import { startTeam, stopTeam, rehydrateTeams } from '../orchestrator/compose.js'
 import { createGateway, destroyGateway } from '../irc/gateway.js'
 import { routeMessage, clearTeamBuffers } from '../irc/router.js'
 
@@ -117,6 +117,25 @@ router.get('/:id/overview', (req, res) => {
     autoNudge: team.autoNudge ?? { enabled: true },
     checkedAt: new Date().toISOString(),
   })
+})
+
+// POST /api/teams/rehydrate — rebuild in-memory store from TEAMS_DIR
+// Used after Manager restart to recover team state without a database.
+router.post('/rehydrate', async (_req, res) => {
+  try {
+    const restored = await rehydrateTeams(teamStore.restoreTeam)
+    // Re-create IRC gateways for restored teams
+    for (const id of restored) {
+      const team = teamStore.getTeam(id)
+      if (team) {
+        try { createGateway(team, { onMessage: routeMessage }) } catch { /* may already exist */ }
+      }
+    }
+    return res.json({ ok: true, restored })
+  } catch (err) {
+    console.error('[api/teams] rehydrate failed:', err)
+    return res.status(500).json({ error: 'rehydrate failed', code: 'REHYDRATE_ERROR' })
+  }
 })
 
 // DELETE /api/teams/:id — teardown compose stack + remove from store

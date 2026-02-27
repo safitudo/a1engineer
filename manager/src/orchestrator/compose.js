@@ -148,8 +148,77 @@ export async function startTeam(teamConfig, opts = {}) {
   const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null, githubToken)
   const composePath = join(teamDir, 'docker-compose.yml')
   await writeFile(composePath, rendered, 'utf8')
+
+  // Persist team metadata for rehydration after Manager restart
+  const meta = {
+    id: teamConfig.id,
+    tenantId: teamConfig.tenantId ?? null,
+    name: teamConfig.name,
+    repo: teamConfig.repo,
+    github: teamConfig.github ?? null,
+    ergo: teamConfig.ergo ?? null,
+    agents: (teamConfig.agents ?? []).map(a => ({
+      id: a.id, role: a.role, model: a.model,
+      runtime: a.runtime ?? 'claude-code', effort: a.effort ?? 'high',
+      prompt: a.prompt ?? '', auth: a.auth ?? null, env: a.env ?? {},
+    })),
+    auth: teamConfig.auth ?? null,
+    status: 'running',
+    createdAt: teamConfig.createdAt ?? new Date().toISOString(),
+  }
+  await writeFile(join(teamDir, 'team-meta.json'), JSON.stringify(meta, null, 2), 'utf8')
+
   await execFileAsync('docker', ['compose', '-f', composePath, 'up', '-d'])
   console.log(`[compose] team ${teamConfig.id} started`)
+}
+
+// Rehydrate team store from TEAMS_DIR on startup.
+// Reads team-meta.json from each team directory and re-inserts into the store.
+// Falls back to parsing docker-compose.yml header if team-meta.json is missing.
+export async function rehydrateTeams(restoreTeam) {
+  const { readdir } = await import('fs/promises')
+  let dirs
+  try { dirs = await readdir(TEAMS_DIR) } catch { return [] }
+  const restored = []
+  for (const d of dirs) {
+    const metaPath = join(TEAMS_DIR, d, 'team-meta.json')
+    const composePath = join(TEAMS_DIR, d, 'docker-compose.yml')
+    try {
+      // Prefer team-meta.json (full fidelity)
+      const raw = await readFile(metaPath, 'utf8')
+      const meta = JSON.parse(raw)
+      // Ensure agents have last_heartbeat field
+      meta.agents = (meta.agents ?? []).map(a => ({ ...a, last_heartbeat: a.last_heartbeat ?? null }))
+      meta.updatedAt = new Date().toISOString()
+      restoreTeam(meta)
+      restored.push(meta.id)
+      console.log(`[rehydrate] restored team ${meta.id} (${meta.name}) from meta`)
+    } catch {
+      // Fallback: parse compose header for name, use dir as id
+      try {
+        const yml = await readFile(composePath, 'utf8')
+        const nameMatch = yml.match(/^# Team: (.+?) \(/m)
+        const name = nameMatch ? nameMatch[1] : d
+        // Extract agent service names from compose
+        const agentMatches = [...yml.matchAll(/^\s+agent-(.+?):/gm)]
+        const agents = agentMatches.map(m => ({
+          id: m[1], role: 'unknown', model: 'unknown',
+          runtime: 'claude-code', effort: 'high', prompt: '',
+          auth: null, env: {}, last_heartbeat: null,
+        }))
+        const team = {
+          id: d, tenantId: null, name, repo: { url: 'unknown' },
+          github: null, ergo: null, agents, auth: null,
+          status: 'running', createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        restoreTeam(team)
+        restored.push(d)
+        console.log(`[rehydrate] restored team ${d} (${name}) from compose fallback`)
+      } catch { /* skip dirs without valid compose */ }
+    }
+  }
+  return restored
 }
 
 export async function stopTeam(teamId) {

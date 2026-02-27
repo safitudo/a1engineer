@@ -20,7 +20,7 @@ try {
     if (!process.env[key]) process.env[key] = val  // don't override existing
   }
 } catch { /* .env not found — that's fine */ }
-import { startTeam, stopTeam } from './orchestrator/compose.js'
+import { startTeam, stopTeam, rehydrateTeams } from './orchestrator/compose.js'
 import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'
 import { startNudger } from './watchdog/nudger.js'
@@ -167,8 +167,17 @@ async function main() {
     case 'serve': {
       const { port = '8080' } = parseArgs(rest)
       const app = createApp()
-      const server = app.listen(Number(port), () => {
+      const server = app.listen(Number(port), async () => {
         console.log(`[manager] REST API + WebSocket listening on :${port}`)
+        // Rehydrate teams from disk on startup
+        try {
+          const restored = await rehydrateTeams(teamStore.restoreTeam)
+          if (restored.length > 0) {
+            console.log(`[manager] rehydrated ${restored.length} team(s) from disk`)
+          }
+        } catch (err) {
+          console.error('[manager] rehydration failed:', err)
+        }
       })
       attachWebSocketServer(server)
       startNudger()
