@@ -93,6 +93,25 @@ async function tmuxSendKeys(teamId, agentId, keys) {
   await dockerExec(teamId, agentId, ['tmux', 'send-keys', '-t', 'agent', ...keys])
 }
 
+/**
+ * Send a message to the agent's interactive Claude Code prompt.
+ * Clears any pending input first (Escape to dismiss, Ctrl+U to clear line),
+ * then types the message and presses Enter to submit.
+ */
+async function sendToPrompt(teamId, agentId, message) {
+  // Escape to dismiss any autocomplete/menu, then Ctrl+A Ctrl+K to clear input
+  await tmuxSendKeys(teamId, agentId, ['Escape'])
+  await new Promise(r => setTimeout(r, 100))
+  await tmuxSendKeys(teamId, agentId, ['C-a'])
+  await new Promise(r => setTimeout(r, 50))
+  await tmuxSendKeys(teamId, agentId, ['C-k'])
+  await new Promise(r => setTimeout(r, 100))
+  // Send message as literal text, then Enter to submit
+  await dockerExec(teamId, agentId, ['tmux', 'send-keys', '-t', 'agent', '-l', message])
+  await new Promise(r => setTimeout(r, 50))
+  await tmuxSendKeys(teamId, agentId, ['Enter'])
+}
+
 // GET /api/teams/:id/agents/:agentId/screen — capture agent's tmux screen
 router.get('/:agentId/screen', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
@@ -163,7 +182,7 @@ router.post('/:agentId/nudge', async (req, res) => {
     : 'continue. check IRC with msg read, then resume your current task.'
 
   try {
-    await tmuxSendKeys(team.id, agent.id, [nudgeMsg, 'Enter'])
+    await sendToPrompt(team.id, agent.id, nudgeMsg)
     return res.json({ ok: true, message: nudgeMsg })
   } catch (err) {
     console.error('[api/agents] nudge failed:', err)
@@ -205,7 +224,7 @@ router.post('/:agentId/directive', async (req, res) => {
     // Ctrl+C to stop current work, brief pause, then new instruction
     await tmuxSendKeys(team.id, agent.id, ['C-c'])
     await new Promise(r => setTimeout(r, 500))
-    await tmuxSendKeys(team.id, agent.id, [message, 'Enter'])
+    await sendToPrompt(team.id, agent.id, message)
     return res.json({ ok: true, action: 'directive', message })
   } catch (err) {
     console.error('[api/agents] directive failed:', err)
