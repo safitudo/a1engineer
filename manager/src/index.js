@@ -1,9 +1,11 @@
-import { readFile } from 'fs/promises'
-import { resolve } from 'path'
+import { readFile, readdir, access } from 'fs/promises'
+import { resolve, join } from 'path'
 import * as teamStore from './store/teams.js'
 import { startTeam, stopTeam } from './orchestrator/compose.js'
 import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'
+
+const TEAMS_DIR = '/tmp/a1-teams'
 
 const [, , command, ...rest] = process.argv
 
@@ -46,25 +48,37 @@ async function main() {
         console.error('Usage: destroy-team --id <team-id>')
         process.exit(1)
       }
-      const team = teamStore.getTeam(id)
-      if (!team) {
-        console.error(`Team not found: ${id}`)
+      // Check compose file exists on disk (works across processes)
+      const composePath = join(TEAMS_DIR, id, 'docker-compose.yml')
+      try { await access(composePath) } catch {
+        console.error(`Team not found: ${id} (no compose file at ${composePath})`)
         process.exit(1)
       }
       console.log(`Stopping team ${id}…`)
       await stopTeam(id)
-      teamStore.deleteTeam(id)
+      teamStore.deleteTeam(id)  // no-op if not in memory, but harmless
       console.log(`Team ${id} destroyed.`)
       break
     }
 
     case 'list-teams': {
-      const teams = teamStore.listTeams()
-      if (teams.length === 0) {
-        console.log('No running teams.')
+      // Scan filesystem for team compose dirs (works across processes)
+      let dirs = []
+      try { dirs = await readdir(TEAMS_DIR) } catch { /* dir may not exist */ }
+      const teamDirs = []
+      for (const d of dirs) {
+        const cp = join(TEAMS_DIR, d, 'docker-compose.yml')
+        try { await access(cp); teamDirs.push(d) } catch { /* skip */ }
+      }
+      if (teamDirs.length === 0) {
+        console.log('No teams found.')
       } else {
-        for (const t of teams) {
-          console.log(`${t.id}  ${t.name}  status=${t.status}  agents=${t.agents.length}`)
+        for (const id of teamDirs) {
+          // Read team name from compose file header comment
+          const yml = await readFile(join(TEAMS_DIR, id, 'docker-compose.yml'), 'utf8')
+          const nameMatch = yml.match(/^# Team: (.+?) \(/m)
+          const name = nameMatch ? nameMatch[1] : '?'
+          console.log(`${id}  ${name}`)
         }
       }
       break

@@ -22,7 +22,7 @@ router.post('/', async (req, res) => {
 
   const team = teamStore.createTeam({ name, repo, agents, auth })
   try {
-    await startTeam(team)
+    await startTeam(team, { apiKey: auth?.apiKey })
     teamStore.updateTeam(team.id, { status: 'running' })
     return res.status(201).json(teamStore.getTeam(team.id))
   } catch (err) {

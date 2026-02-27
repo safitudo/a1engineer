@@ -1,10 +1,16 @@
 import { Router } from 'express'
-import { execFile } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { promisify } from 'util'
+import { join } from 'path'
 import * as teamStore from '../store/teams.js'
 import { startTeam } from '../orchestrator/compose.js'
 
 const execFileAsync = promisify(execFile)
+const TEAMS_DIR = '/tmp/a1-teams'
+
+function composeFile(teamId) {
+  return join(TEAMS_DIR, teamId, 'docker-compose.yml')
+}
 const router = Router({ mergeParams: true })
 
 // GET /api/teams/:id/agents — list agents in team
@@ -58,12 +64,13 @@ router.delete('/:agentId', async (req, res) => {
   const agent = team.agents.find((a) => a.id === req.params.agentId)
   if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
 
-  const containerName = `agent-${agent.id}`
+  const serviceName = `agent-${agent.id}`
+  const cf = composeFile(team.id)
   try {
-    await execFileAsync('docker', ['stop', containerName])
-    await execFileAsync('docker', ['rm', containerName])
+    await execFileAsync('docker', ['compose', '-f', cf, 'stop', serviceName])
+    await execFileAsync('docker', ['compose', '-f', cf, 'rm', '-f', serviceName])
   } catch (err) {
-    console.error('[api/agents] docker stop/rm failed:', err)
+    console.error('[api/agents] docker compose stop/rm failed:', err)
     // Container may already be gone — continue with store removal
   }
 
@@ -85,12 +92,24 @@ router.post('/:agentId/nudge', async (req, res) => {
     return res.status(400).json({ error: 'message is required', code: 'MISSING_MESSAGE' })
   }
 
-  const containerName = `agent-${agent.id}`
+  const serviceName = `agent-${agent.id}`
+  const cf = composeFile(team.id)
   try {
-    await execFileAsync('docker', [
-      'exec', '-i', containerName,
-      'sh', '-c', 'cat >> /tmp/nudge.txt',
-    ], { input: message + '\n' })
+    await new Promise((resolve, reject) => {
+      const proc = spawn('docker', [
+        'compose', '-f', cf, 'exec', '-T', serviceName,
+        'sh', '-c', 'cat >> /tmp/nudge.txt',
+      ], { stdio: ['pipe', 'pipe', 'pipe'] })
+      let stderr = ''
+      proc.stderr.on('data', (d) => { stderr += d })
+      proc.on('error', reject)
+      proc.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`docker compose exec exited ${code}: ${stderr}`))
+      })
+      proc.stdin.write(message + '\n')
+      proc.stdin.end()
+    })
     return res.json({ ok: true })
   } catch (err) {
     console.error('[api/agents] nudge failed:', err)

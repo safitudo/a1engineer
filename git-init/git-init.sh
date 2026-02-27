@@ -25,25 +25,37 @@ fi
 mkdir -p "$WORKTREES_DIR"
 
 # 2. Create per-agent worktrees from AGENTS JSON
-# AGENTS is a JSON array of [{role, city}]
+# AGENTS is a JSON array of [{role, city, id?}]
 # Use awk to parse — alpine/git has no jq
+# If "id" is present, use it as the worktree name; otherwise fall back to city-role.
 echo "$AGENTS" | awk '
 BEGIN { RS="}"; FS="\"" }
 {
-  role=""; city=""
+  role=""; city=""; id=""
   for (i=1; i<=NF; i++) {
     if ($i == "role") role=$(i+2)
     if ($i == "city") city=$(i+2)
+    if ($i == "id")   id=$(i+2)
   }
-  if (role != "" && city != "") print city "-" role
+  if (role != "" && city != "") {
+    if (id != "") print id
+    else print city "-" role
+  }
 }
 ' | while read -r name; do
   worktree_path="$WORKTREES_DIR/$name"
   branch="agent/$name"
 
   if [ -d "$worktree_path" ]; then
-    echo "[git-init] Worktree already exists: $worktree_path"
-    continue
+    # Verify it's a real worktree (has .git file), not just an empty dir
+    # created by Docker's working_dir from a previous run.
+    if [ -e "$worktree_path/.git" ]; then
+      echo "[git-init] Worktree already exists: $worktree_path"
+      continue
+    else
+      echo "[git-init] Removing stale empty directory: $worktree_path"
+      rm -rf "$worktree_path"
+    fi
   fi
 
   echo "[git-init] Creating worktree: $worktree_path (branch: $branch)"

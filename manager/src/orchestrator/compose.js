@@ -12,6 +12,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE_PATH = join(__dirname, '../../templates/team-compose.yml.ejs')
 const TEAMS_DIR = '/tmp/a1-teams'
 
+const DEFAULT_ERGO_IMAGE = 'a1-ergo:latest'
+const DEFAULT_ERGO_CONFIG = join(__dirname, '../../../templates/ergo/ircd.yaml')
 const VALID_AUTH_MODES = ['session', 'api-key']
 
 // Known Docker secrets: logical name → filename in secretsDir
@@ -62,7 +64,12 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
   const template = await readFile(TEMPLATE_PATH, 'utf8')
   return ejs.render(template, {
     team: { id: teamConfig.id, name: teamConfig.name },
-    ergo: teamConfig.ergo ?? {},
+    ergo: {
+      image: DEFAULT_ERGO_IMAGE,
+      configPath: DEFAULT_ERGO_CONFIG,
+      port: 6667,
+      ...teamConfig.ergo,
+    },
     repo: teamConfig.repo ?? {},
     agents: teamConfig.agents ?? [],
     auth: authContext,
@@ -71,10 +78,12 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
 }
 
 export async function startTeam(teamConfig, opts = {}) {
-  const secretsDir = opts.secretsDir ?? null
-  const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null)
   const teamDir = join(TEAMS_DIR, teamConfig.id)
   await mkdir(teamDir, { recursive: true })
+  // Auto-create secretsDir for api-key mode so secrets flow works without --secrets flag
+  const auth = teamConfig.auth ?? {}
+  const secretsDir = opts.secretsDir ?? (auth.mode === 'api-key' ? teamDir : null)
+  const rendered = await renderCompose(teamConfig, secretsDir, opts.apiKey ?? null)
   const composePath = join(teamDir, 'docker-compose.yml')
   await writeFile(composePath, rendered, 'utf8')
   await execFileAsync('docker', ['compose', '-f', composePath, 'up', '-d'])
