@@ -1,0 +1,4 @@
+#!/bin/bash
+# Returns the current GitHub token. Always fresh — reads from file updated by token-refresh watchdog.
+# Usage: curl -H "Authorization: token $(github-token)" https://api.github.com/...
+cat /tmp/github-token 2>/dev/null

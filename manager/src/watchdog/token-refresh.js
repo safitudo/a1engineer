@@ -53,6 +53,8 @@ async function refresh() {
               `cp /home/agent/.netrc /root/.netrc 2>/dev/null || true`,
               // Update GITHUB_TOKEN in agent-env.sh (sourced via BASH_ENV)
               `sed -i 's|^export GITHUB_TOKEN=.*|export GITHUB_TOKEN="${token}"|' /tmp/agent-env.sh 2>/dev/null || echo 'export GITHUB_TOKEN="${token}"' >> /tmp/agent-env.sh`,
+              // Write plain token file for $(github-token) helper
+              `echo '${token}' > /tmp/github-token && chmod 644 /tmp/github-token`,
             ].join(' && '),
           ], { timeout: 10000 })
           count++

@@ -30,6 +30,20 @@ msg read                      # Read new messages from all channels
 msg read '#channel'           # Read from a specific channel
 ```
 
+### GitHub API Token
+
+**Do NOT use `$GITHUB_TOKEN` directly** — it may be stale. Use the `github-token` helper which always returns a fresh token:
+
+```bash
+# Correct — always fresh:
+curl -H "Authorization: token $(github-token)" https://api.github.com/repos/OWNER/REPO/pulls
+
+# Wrong — may be expired:
+curl -H "Authorization: token $GITHUB_TOKEN" ...
+```
+
+For `git push/pull`, the credential helper handles token refresh automatically — no action needed.
+
 Your IRC nick is auto-generated from your worktree name + `IRC_ROLE`.
 Before doing anything else, check if `IRC_ROLE` is set in your environment:
 ```bash
