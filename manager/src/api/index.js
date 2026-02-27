@@ -5,6 +5,7 @@ import { requireAuth, requireTeamOwnership } from '../middleware/auth.js'
 import teamsRouter from './teams.js'
 import agentsRouter from './agents.js'
 import channelsRouter from './channels.js'
+import authRouter from './auth.js'
 
 export function createApp() {
   const app = express()
@@ -26,6 +27,9 @@ export function createApp() {
     console.log(`[heartbeat] team=${teamId} agent=${agentId} at=${now}`)
     return res.json({ ok: true, at: now })
   })
+
+  // Auth routes — no tenant middleware (login is public-ish)
+  app.use('/api/auth', authRouter)
 
   // REST API — tenant-scoped
   app.use('/api/teams', requireAuth, requireTeamOwnership, teamsRouter)
