@@ -90,6 +90,11 @@
           "prompt": {
             "type": "string",
             "description": "Initial prompt for the agent. If omitted, falls back to .context/agents/{role}/prompt.md in the repo."
+          },
+          "auth": {
+            "type": "string",
+            "description": "Per-agent auth override. 'session' uses host OAuth tokens (~/.claude mount), 'api-key' uses ANTHROPIC_API_KEY from Docker secret. Defaults to team-level auth.mode.",
+            "enum": ["session", "api-key"]
           }
         }
       }

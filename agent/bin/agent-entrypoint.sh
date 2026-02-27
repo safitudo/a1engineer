@@ -41,6 +41,14 @@ EOF
 [ -f /run/secrets/anthropic_key ] && export ANTHROPIC_API_KEY=$(cat /run/secrets/anthropic_key)
 [ -f /run/secrets/github_token ]  && export GITHUB_TOKEN=$(cat /run/secrets/github_token)
 
+# ── Session auth: write credentials to plaintext file (Claude Code on Linux) ──
+if [ -f /run/secrets/anthropic_session ]; then
+  cp /run/secrets/anthropic_session "$AGENT_HOME/.claude/.credentials.json"
+  chmod 600 "$AGENT_HOME/.claude/.credentials.json"
+  echo "[entrypoint] OAuth credentials written to .credentials.json"
+  export SESSION_AUTH=1
+fi
+
 # ── Git HTTPS auth (.netrc) ─────────────────────────────────────────────────
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   printf 'machine github.com\nlogin x-access-token\npassword %s\n' "$GITHUB_TOKEN" > "$AGENT_HOME/.netrc"
@@ -69,6 +77,7 @@ export MODEL="${MODEL:-sonnet}"
 cat > /tmp/agent-env.sh <<ENVEOF
 export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+export SESSION_AUTH="${SESSION_AUTH:-}"
 export MODEL="${MODEL:-sonnet}"
 export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_CODE_EFFORT_LEVEL:-high}"
 export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE="${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:-35}"

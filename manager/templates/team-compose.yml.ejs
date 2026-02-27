@@ -50,16 +50,23 @@ services:
     restart: "no"
 
 <% agents.forEach(function(agent) { -%>
-  # ── Agent: <%- agent.id %> (<%- agent.role %>) ─────────────────────────────
+<%   var isSession = agent._authMode === 'session'; -%>
+<%   // Per-agent secrets: github_token always; anthropic_key for api-key, anthropic_session for session -%>
+<%   var agentSecrets = secretNames.filter(function(n) {
+       if (n === 'anthropic_key') return !isSession;
+       if (n === 'anthropic_session') return isSession;
+       return true;
+     }); -%>
+  # ── Agent: <%- agent.id %> (<%- agent.role %>) [<%- agent._authMode %>] ────
   agent-<%- agent.id %>:
     image: a1-agent-<%- agent.runtime %>:latest
     networks:
       - net-<%- team.name %>
     volumes:
       - git-<%- team.name %>:/git
-<% if (auth.mode === 'session') { -%>
+<% if (isSession && sessionResolvedPath) { -%>
       - type: bind
-        source: <%- auth.resolvedPath %>
+        source: <%- sessionResolvedPath %>
         target: /root/.claude-host
         read_only: true
 <% } -%>
@@ -82,9 +89,9 @@ services:
 <% Object.entries(agent.env || {}).forEach(function([k, v]) { -%>
       <%- k %>: <%- JSON.stringify(String(v)) %>
 <% }); -%>
-<% if (secretNames.length > 0) { -%>
+<% if (agentSecrets.length > 0) { -%>
     secrets:
-<% secretNames.forEach(function(name) { -%>
+<% agentSecrets.forEach(function(name) { -%>
       - <%- name %>
 <% }); -%>
 <% } -%>

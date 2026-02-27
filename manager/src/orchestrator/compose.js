@@ -19,11 +19,30 @@ const VALID_AUTH_MODES = ['session', 'api-key']
 // Known Docker secrets: logical name → filename in secretsDir
 const KNOWN_SECRETS = {
   anthropic_key: 'anthropic_key.txt',
+  anthropic_session: 'anthropic_session.txt',
   github_token: 'github_token.txt',
 }
 
 async function fileExists(p) {
   try { await access(p); return true } catch { return false }
+}
+
+// Extract OAuth credentials JSON from macOS Keychain (Claude Code stores it there).
+// Returns the full credentials JSON string or null if unavailable.
+async function extractSessionCredentials() {
+  try {
+    const { stdout } = await execFileAsync('security', [
+      'find-generic-password', '-s', 'Claude Code-credentials', '-w',
+    ])
+    const creds = JSON.parse(stdout.trim())
+    if (creds?.claudeAiOauth?.accessToken) return stdout.trim()
+    console.warn('[compose] Keychain entry found but no accessToken in claudeAiOauth')
+    return null
+  } catch (err) {
+    // Not on macOS or no Keychain entry — check env fallback
+    if (process.env.CLAUDE_SESSION_CREDENTIALS) return process.env.CLAUDE_SESSION_CREDENTIALS
+    return null
+  }
 }
 
 // Returns { secretName: absoluteFilePath } for secrets present in secretsDir.
@@ -38,26 +57,44 @@ async function resolveSecrets(secretsDir) {
 }
 
 export async function renderCompose(teamConfig, secretsDir = null, apiKey = null, githubToken = null) {
-  const auth = teamConfig.auth ?? { mode: 'session', sessionPath: '~/.claude' }
+  const teamAuth = teamConfig.auth ?? { mode: 'session', sessionPath: '~/.claude' }
 
-  if (!VALID_AUTH_MODES.includes(auth.mode)) {
-    throw new Error(`Unknown auth mode: ${auth.mode}. Must be one of: ${VALID_AUTH_MODES.join(', ')}`)
+  if (!VALID_AUTH_MODES.includes(teamAuth.mode)) {
+    throw new Error(`Unknown auth mode: ${teamAuth.mode}. Must be one of: ${VALID_AUTH_MODES.join(', ')}`)
   }
 
-  let authContext
-  if (auth.mode === 'session') {
-    const resolvedPath = (auth.sessionPath ?? '~/.claude').replace(/^~/, homedir())
-    await access(resolvedPath).catch(() =>
-      console.warn(`[compose] Warning: session path does not exist: ${auth.sessionPath}`)
+  // Resolve per-agent effective auth mode (agent.auth overrides team auth)
+  const agents = (teamConfig.agents ?? []).map(a => ({
+    ...a,
+    _authMode: a.auth ?? teamAuth.mode,
+  }))
+
+  const hasApiKeyAgent = agents.some(a => a._authMode === 'api-key')
+  const hasSessionAgent = agents.some(a => a._authMode === 'session')
+
+  // Resolve session path if any agent uses session auth
+  let sessionResolvedPath = null
+  if (hasSessionAgent) {
+    sessionResolvedPath = (teamAuth.sessionPath ?? '~/.claude').replace(/^~/, homedir())
+    await access(sessionResolvedPath).catch(() =>
+      console.warn(`[compose] Warning: session path does not exist: ${sessionResolvedPath}`)
     )
-    authContext = { mode: 'session', resolvedPath }
-  } else {
-    // api-key: write key to secrets file — never injected as plain env var
-    authContext = { mode: 'api-key' }
+    // Extract OAuth token from macOS Keychain and write as secret
     if (secretsDir) {
-      const key = apiKey ?? process.env.ANTHROPIC_API_KEY ?? ''
-      await writeFile(join(secretsDir, KNOWN_SECRETS.anthropic_key), key, 'utf8')
+      const oauthToken = await extractSessionCredentials()
+      if (oauthToken) {
+        await writeFile(join(secretsDir, KNOWN_SECRETS.anthropic_session), oauthToken, 'utf8')
+        console.log('[compose] OAuth session token extracted for session-auth agents')
+      } else {
+        console.warn('[compose] Warning: could not extract OAuth token from Keychain. Session-auth agents will not authenticate.')
+      }
     }
+  }
+
+  // Write API key to secrets if any agent uses api-key auth
+  if (hasApiKeyAgent && secretsDir) {
+    const key = apiKey ?? process.env.ANTHROPIC_API_KEY ?? ''
+    await writeFile(join(secretsDir, KNOWN_SECRETS.anthropic_key), key, 'utf8')
   }
 
   // Write GitHub token to secrets dir if available
@@ -81,8 +118,8 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
     team: { id: teamConfig.id, name: teamConfig.name },
     ergo: ergoMerged,
     repo: { ...teamConfig.repo, githubToken: githubToken || teamConfig.repo?.githubToken },
-    agents: teamConfig.agents ?? [],
-    auth: authContext,
+    agents,
+    sessionResolvedPath,
     secrets,
   })
 }
@@ -90,9 +127,13 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
 export async function startTeam(teamConfig, opts = {}) {
   const teamDir = join(TEAMS_DIR, teamConfig.id)
   await mkdir(teamDir, { recursive: true })
-  // Auto-create secretsDir for api-key mode so secrets flow works without --secrets flag
-  const auth = teamConfig.auth ?? {}
-  const secretsDir = opts.secretsDir ?? (auth.mode === 'api-key' || teamConfig.github ? teamDir : null)
+  // Auto-create secretsDir if any agent needs secrets (api-key, session OAuth, or github)
+  const teamAuthMode = teamConfig.auth?.mode ?? 'session'
+  const anySecretsNeeded = (teamConfig.agents ?? []).some(a => {
+    const mode = a.auth ?? teamAuthMode
+    return mode === 'api-key' || mode === 'session'
+  }) || !!teamConfig.github
+  const secretsDir = opts.secretsDir ?? (anySecretsNeeded ? teamDir : null)
 
   // Resolve GitHub token: App mode (auto-generate) or PAT fallback
   let githubToken = opts.githubToken ?? null
