@@ -100,14 +100,14 @@ ENVEOF
 chmod 644 /tmp/agent-env.sh
 
 # ── Write runtime-specific launch script ────────────────────────────────────
-# Runs INSIDE tmux. For API-key Claude Code, uses --print --continue loop.
-# For session auth or other runtimes, runs interactively.
+# Runs INSIDE tmux. Always uses --print loop for Claude Code (works with both
+# API key and session auth). This enables reliable nudging via the FIFO/inbox
+# pipeline — interactive mode cannot be nudged because Claude Code's TUI
+# doesn't process tmux send-keys Enter.
 case "$AGENT_RUNTIME" in
   claude-code)
-    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-      # API key mode: --print --continue loop (API keys don't work in interactive mode)
-      touch /tmp/agent-mode-print  # signal to sidecar
-      cat > /tmp/launch-agent.sh <<'LAUNCH'
+    touch /tmp/agent-mode-print  # signal to sidecar: use inbox path for nudges/IRC
+    cat > /tmp/launch-agent.sh <<'LAUNCH'
 #!/usr/bin/env bash
 source /tmp/agent-env.sh 2>/dev/null || true
 
@@ -146,18 +146,6 @@ while true; do
   sleep 3
 done
 LAUNCH
-    else
-      # Session auth: interactive mode works
-      cat > /tmp/launch-agent.sh <<'LAUNCH'
-#!/usr/bin/env bash
-source /tmp/agent-env.sh 2>/dev/null || true
-if [ -f /tmp/prompt.md ]; then
-  exec claude --dangerously-skip-permissions --model "$MODEL" "$(cat /tmp/prompt.md)"
-else
-  exec claude --dangerously-skip-permissions --model "$MODEL"
-fi
-LAUNCH
-    fi
     ;;
   codex)
     cat > /tmp/launch-agent.sh <<'LAUNCH'
