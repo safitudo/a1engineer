@@ -83,7 +83,8 @@ router.delete('/:agentId', async (req, res) => {
 async function dockerExec(teamId, agentId, cmd, opts = {}) {
   const serviceName = `agent-${agentId}`
   const cf = composeFile(teamId)
-  const args = ['compose', '-f', cf, 'exec', '-T', serviceName, ...cmd]
+  // Run as 'agent' user — tmux session belongs to that user, not root
+  const args = ['compose', '-f', cf, 'exec', '-T', '-u', 'agent', serviceName, ...cmd]
   const { stdout } = await execFileAsync('docker', args, { timeout: opts.timeout ?? 10000 })
   return stdout
 }
