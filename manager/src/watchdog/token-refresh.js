@@ -19,8 +19,8 @@ const REFRESH_INTERVAL = 45 * 60 * 1000 // 45 minutes
 export function startTokenRefresh() {
   console.log('[token-refresh] started (every 45 min)')
 
-  // Run immediately on startup, then on interval
-  refresh()
+  // Delay first refresh to let containers start, then on interval
+  setTimeout(refresh, 30_000)
   const interval = setInterval(refresh, REFRESH_INTERVAL)
 
   return { stop: () => clearInterval(interval) }
@@ -46,7 +46,14 @@ async function refresh() {
           await execFileAsync('docker', [
             'compose', '-f', cf, 'exec', '-T', serviceName,
             'bash', '-c',
-            `printf 'machine github.com\\nlogin x-access-token\\npassword ${token}\\n' > /home/agent/.netrc && chmod 600 /home/agent/.netrc && cp /home/agent/.netrc /root/.netrc 2>/dev/null || true`,
+            [
+              // .netrc for git credential fallback
+              `printf 'machine github.com\\nlogin x-access-token\\npassword ${token}\\n' > /home/agent/.netrc`,
+              `chmod 600 /home/agent/.netrc`,
+              `cp /home/agent/.netrc /root/.netrc 2>/dev/null || true`,
+              // Update GITHUB_TOKEN in agent-env.sh (sourced via BASH_ENV)
+              `sed -i 's|^export GITHUB_TOKEN=.*|export GITHUB_TOKEN="${token}"|' /tmp/agent-env.sh 2>/dev/null || echo 'export GITHUB_TOKEN="${token}"' >> /tmp/agent-env.sh`,
+            ].join(' && '),
           ], { timeout: 10000 })
           count++
         } catch {
