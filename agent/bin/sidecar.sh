@@ -106,7 +106,7 @@ nudge_listener() {
             su -s /bin/bash "$TMUX_USER" -c "
               tmux send-keys -t $TMUX_SESSION C-u
               sleep 0.1
-              tmux set-buffer -b _nudge \"\$MSG\"
+              tmux set-buffer -b _nudge \"$MSG\"
               tmux paste-buffer -b _nudge -t $TMUX_SESSION
               sleep 0.1
               tmux send-keys -t $TMUX_SESSION -H 0d
@@ -128,7 +128,7 @@ nudge_listener() {
               su -s /bin/bash "$TMUX_USER" -c "
                 tmux send-keys -t $TMUX_SESSION C-u
                 sleep 0.1
-                tmux set-buffer -b _nudge \"\$MSG\"
+                tmux set-buffer -b _nudge \"$PAYLOAD\"
                 tmux paste-buffer -b _nudge -t $TMUX_SESSION
                 sleep 0.1
                 tmux send-keys -t $TMUX_SESSION -H 0d
