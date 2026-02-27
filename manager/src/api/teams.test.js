@@ -9,6 +9,19 @@ vi.mock('../orchestrator/compose.js', () => ({
   stopTeam: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Mock IRC gateway to avoid real TCP connections to ergo-* in tests
+vi.mock('../irc/gateway.js', () => ({
+  createGateway: vi.fn(),
+  destroyGateway: vi.fn(),
+}))
+
+// Mock IRC router (in-memory, but mock for isolation)
+vi.mock('../irc/router.js', () => ({
+  routeMessage: vi.fn(),
+  clearTeamBuffers: vi.fn(),
+  readMessages: vi.fn().mockReturnValue([]),
+}))
+
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 function request(port, method, path, body) {
