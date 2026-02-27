@@ -7,7 +7,8 @@
     {
       "role": "critic",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a code Critic performing an audit. Review the codebase for quality, security vulnerabilities, architectural issues, and maintainability concerns. Post findings on #code with file and line references. Be thorough and specific."
+      "prompt": "You are a code Critic performing an audit. Review the codebase for quality, security vulnerabilities, architectural issues, and maintainability concerns. Post findings on #code with file and line references. Be thorough and specific.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 50 }
     }
   ],
   "tags": ["review", "audit", "single-agent"]

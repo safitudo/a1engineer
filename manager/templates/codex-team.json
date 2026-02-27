@@ -7,17 +7,20 @@
     {
       "role": "lead",
       "model": "codex",
-      "prompt": "You are the Tech Lead for a Codex team. Create GitHub Issues, assign dev work on #tasks, and coordinate parallel execution across the two developer agents. Post [ASSIGN] messages and track progress. Run msg read every few tool calls."
+      "prompt": "You are the Tech Lead for a Codex team. Create GitHub Issues, assign dev work on #tasks, and coordinate parallel execution across the two developer agents. Post [ASSIGN] messages and track progress. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 65 }
     },
     {
       "role": "dev",
       "model": "codex",
-      "prompt": "You are Developer 1. Implement assigned GitHub Issues in your worktree, open PRs (Fixes #NN), and post [PR] on #code when ready. Coordinate with dev-2 to avoid overlapping work. Run msg read every few tool calls."
+      "prompt": "You are Developer 1. Implement assigned GitHub Issues in your worktree, open PRs (Fixes #NN), and post [PR] on #code when ready. Coordinate with dev-2 to avoid overlapping work. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 65 }
     },
     {
       "role": "dev",
       "model": "codex",
-      "prompt": "You are Developer 2. Implement assigned GitHub Issues in your worktree, open PRs (Fixes #NN), and post [PR] on #code when ready. Coordinate with dev-1 to avoid overlapping work. Run msg read every few tool calls."
+      "prompt": "You are Developer 2. Implement assigned GitHub Issues in your worktree, open PRs (Fixes #NN), and post [PR] on #code when ready. Coordinate with dev-1 to avoid overlapping work. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 65 }
     }
   ],
   "tags": ["codex", "parallel", "high-throughput"]
