@@ -41,33 +41,53 @@ export default function IrcFeed({ teamId }) {
     setStatus('connecting')
     setMessages([])
 
-    const ws = new WebSocket(`${WS_BASE}/ws`)
-    wsRef.current = ws
+    let cancelled = false
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', teamId }))
-    }
+    // Fetch WS auth token from server (bridges httpOnly cookie)
+    async function connect() {
+      let token = ''
+      try {
+        const res = await fetch('/api/auth/ws-token')
+        if (res.ok) {
+          const data = await res.json()
+          token = data.token ?? ''
+        }
+      } catch { /* proceed without token — server will reject if auth required */ }
 
-    ws.onmessage = (event) => {
-      let msg
-      try { msg = JSON.parse(event.data) } catch { return }
+      if (cancelled) return
 
-      if (msg.type === 'subscribed') {
-        setStatus('connected')
-      } else if (msg.type === 'message') {
-        setMessages(prev => {
-          const next = [...prev, msg]
-          return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
-        })
+      const url = token ? `${WS_BASE}/ws?token=${encodeURIComponent(token)}` : `${WS_BASE}/ws`
+      const ws = new WebSocket(url)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'subscribe', teamId }))
       }
-      // heartbeat / agent_status not shown in this feed
+
+      ws.onmessage = (event) => {
+        let msg
+        try { msg = JSON.parse(event.data) } catch { return }
+
+        if (msg.type === 'subscribed') {
+          setStatus('connected')
+        } else if (msg.type === 'message') {
+          setMessages(prev => {
+            const next = [...prev, msg]
+            return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
+          })
+        }
+        // heartbeat / agent_status not shown in this feed
+      }
+
+      ws.onerror = () => setStatus('disconnected')
+      ws.onclose = () => setStatus('disconnected')
     }
 
-    ws.onerror = () => setStatus('disconnected')
-    ws.onclose = () => setStatus('disconnected')
+    connect()
 
     return () => {
-      ws.close()
+      cancelled = true
+      wsRef.current?.close()
     }
   }, [teamId])
 

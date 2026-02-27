@@ -1,6 +1,7 @@
 import { WebSocketServer } from 'ws'
 import { getTeam } from '../store/teams.js'
 import { registerBroadcaster } from '../irc/router.js'
+import { upsertTenant } from '../store/tenants.js'
 
 // WebSocket.OPEN numeric value (avoids importing the class just for the constant)
 const WS_OPEN = 1
@@ -99,6 +100,12 @@ export function attachWebSocketServer(server) {
         return
       }
 
+      // Tenant scoping — only allow subscribing to own teams
+      if (ws.tenant && team.tenantId && ws.tenant.id !== team.tenantId) {
+        ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'team not found' }))
+        return
+      }
+
       // Unsubscribe from previous team when switching
       if (currentTeamId) {
         subscriptions.get(currentTeamId)?.delete(ws)
@@ -138,7 +145,26 @@ export function attachWebSocketServer(server) {
       return
     }
 
+    // Authenticate via query param: /ws?token=<apiKey>
+    const token = new URL(req.url, 'http://localhost').searchParams.get('token')
+    if (!token) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+      socket.destroy()
+      return
+    }
+
+    const tenant = upsertTenant(token)
+    if (!tenant) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+      socket.destroy()
+      return
+    }
+
+    // Attach tenant info to request for downstream use
+    req.tenant = tenant
+
     wss.handleUpgrade(req, socket, head, (ws) => {
+      ws.tenant = tenant
       wss.emit('connection', ws, req)
     })
   })
