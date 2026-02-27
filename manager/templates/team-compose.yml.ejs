@@ -33,6 +33,12 @@ services:
         source: <%- ergo.configPath %>
         target: /ircd/ircd.yaml
         read_only: true
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "<%- ergo.port || 6667 %>"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 3s
     restart: unless-stopped
 
   # ── Git volume initialiser (one-shot) ──────────────────────────────────────
@@ -98,7 +104,7 @@ services:
 <% } -%>
     depends_on:
       ergo-<%- team.name %>:
-        condition: service_started
+        condition: service_healthy
       git-init-<%- team.name %>:
         condition: service_completed_successfully
     restart: unless-stopped
