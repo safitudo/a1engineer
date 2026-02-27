@@ -87,3 +87,55 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 | `[REVIEW] verdict — PR link` | Review result (approved / changes needed) |
 | `[DONE] #NN description` | Task completed, issue auto-closed by PR |
 | `[STATUS] update` | Progress update |
+
+---
+
+## Sprint Progress (2026-02-27)
+
+### What's Been Built & Merged to Main
+
+**Web UI (Next.js — `web/`)**
+- **Dashboard** (`web/app/dashboard/page.js`) — Team cards grid, dark theme (#0d1117 bg, #3fb950 accent)
+- **Create Team Wizard** (`web/app/dashboard/teams/new/page.js`) — 5-step form: team name+repo, runtime select, agents, API key, review+launch
+- **Sidebar Layout** (`web/app/dashboard/layout.js`) — Navigation layout wrapping dashboard pages
+- **IrcFeed Component** (`web/components/IrcFeed.js`) — WebSocket IRC feed, connects directly to Manager:8080/ws (not through Next.js proxy). MAX_MESSAGES=500
+- **Team Detail Page** (`web/app/dashboard/teams/[id]/page.js`) — Uses IrcFeed component, correct WS URL
+- **AgentConsole Component** (`web/components/AgentConsole.js`) — Phase 2 read-only. Polls GET /api/teams/:id/agents/:agentId/screen every 2s. Click agent card to expand/collapse console output
+- **Login Page** (`web/app/login/page.js`) — Paste API key → set httpOnly cookie → redirect to dashboard
+- **Route Handler Proxy** (`web/app/api/[...path]/route.js`) — Replaces Next.js rewrites. Reads cookie, injects Authorization: Bearer header, forwards to Manager
+- **Edge Middleware** (`web/middleware.js`) — Redirects unauthenticated /dashboard/* requests to /login
+
+**Manager API (Express — `manager/`)**
+- **IRC Gateway Lifecycle** (`manager/src/index.js`) — createGateway/destroyGateway wired into team start/stop
+- **TEAMS_DIR Constant** (`manager/src/constants.js`) — Extracted from 4 duplicated locations
+- **Tenant Auth Middleware** (`manager/src/middleware/auth.js`) — Bearer token auth on all /api/teams routes, BYOK auto-provisioning via upsertTenant, heartbeat endpoint exempt
+- **Tenant Store** (`manager/src/store/tenants.js`) — In-memory Map, same pattern as teams.js
+- **Auth Endpoints** (`manager/src/api/auth.js`) — POST /api/auth/login validates Bearer token
+- **WebSocket Auth** — WS upgrade validates API key via ?token= query param, tenant scoping on subscribe
+- **IRC Channel Send** — POST /channels/:name/messages now works (was 501 stub), uses IrcGateway.say()
+
+**Tests**
+- 81 unit/integration tests passing
+- Test mocks for IRC gateway and router (prevent real TCP connections)
+
+### Architecture Decisions
+- **BYOK (Bring Your Own Key)** — Users provide their own API keys, no managed billing
+- **Agent-agnostic** — Claude first, but architecture supports adding other providers
+- **Multi-tenant isolation** — API key → tenantId mapping, teams scoped to tenant
+- **Next.js rewrites DON'T proxy WebSocket** — IrcFeed connects directly to Manager:8080
+- **Next.js rewrites DON'T forward custom headers** — Route handler proxy pattern used instead
+- **Design tokens** — #0d1117 bg, #161b22 card, #3fb950 accent (GitHub dark theme)
+
+### What's Remaining (Priority Order)
+1. **Signup page** (`web/app/signup/page.js`) — Register new tenant, show API key once
+2. **Channels API gap** — GET /:name/messages still returns 501 (readMessages wiring needed, ~5 lines)
+3. **Playwright E2E tests** — QA-6 started setup, wizard E2E has visibility issues (elements in DOM but Playwright reports hidden)
+4. **Phase 3 AgentConsole** — Interactive terminal via xterm.js (currently read-only polling)
+5. **IRC client URL for users** — Expose Ergo IRC server connection details in UI
+6. **Persistent tenant store** — Graduate from in-memory Map to database
+7. **Tenant ID improvement** — Currently apiKey.slice(0,12), should use randomUUID()
+
+### Known Issues
+- `chuck screen/nudge/directive` commands return EXEC_ERROR (likely Docker socket / compose path mismatch in Chuck's container)
+- dev-3, dev-4, dev-5 agents went unresponsive during sprint (heartbeats active but no IRC reads, no git activity)
+- GitHub token expiration blocked pushes mid-sprint (resolved by Stanislav)
