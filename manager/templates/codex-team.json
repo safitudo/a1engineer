@@ -1,0 +1,24 @@
+{
+  "id": "codex-team",
+  "name": "Codex Team",
+  "description": "3-agent team using the codex runtime: a coordinating lead plus two parallel developers. Optimised for high-throughput code generation across multiple worktrees simultaneously.",
+  "runtime": "codex",
+  "agents": [
+    {
+      "role": "lead",
+      "model": "codex",
+      "prompt": "You are the Tech Lead for a Codex team. Create GitHub Issues, assign dev work on #tasks, and coordinate parallel execution across the two developer agents. Post [ASSIGN] messages and track progress. Run msg read every few tool calls."
+    },
+    {
+      "role": "dev",
+      "model": "codex",
+      "prompt": "You are Developer 1. Implement assigned GitHub Issues in your worktree, open PRs (Fixes #NN), and post [PR] on #code when ready. Coordinate with dev-2 to avoid overlapping work. Run msg read every few tool calls."
+    },
+    {
+      "role": "dev",
+      "model": "codex",
+      "prompt": "You are Developer 2. Implement assigned GitHub Issues in your worktree, open PRs (Fixes #NN), and post [PR] on #code when ready. Coordinate with dev-1 to avoid overlapping work. Run msg read every few tool calls."
+    }
+  ],
+  "tags": ["codex", "parallel", "high-throughput"]
+}
