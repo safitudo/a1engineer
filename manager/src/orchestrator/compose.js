@@ -7,6 +7,7 @@ import { homedir } from 'os'
 import ejs from 'ejs'
 import { resolveGitHubToken } from '../github/app.js'
 import { TEAMS_DIR } from '../constants.js'
+import { restoreTenant } from '../store/tenants.js'
 
 const execFileAsync = promisify(execFile)
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -154,6 +155,7 @@ export async function startTeam(teamConfig, opts = {}) {
     id: teamConfig.id,
     tenantId: teamConfig.tenantId ?? null,
     internalToken: teamConfig.internalToken ?? null,
+    tenantApiKey: opts.apiKey ?? null,
     name: teamConfig.name,
     repo: teamConfig.repo,
     github: teamConfig.github ?? null,
@@ -192,6 +194,11 @@ export async function rehydrateTeams(restoreTeam) {
       // Ensure agents have last_heartbeat field
       meta.agents = (meta.agents ?? []).map(a => ({ ...a, last_heartbeat: a.last_heartbeat ?? null }))
       meta.updatedAt = new Date().toISOString()
+      // Restore tenant→tenantId mapping so ownership checks work after restart
+      if (meta.tenantId && meta.tenantApiKey) {
+        restoreTenant(meta.tenantApiKey, meta.tenantId)
+        console.log(`[rehydrate] restored tenant ${meta.tenantId} for team ${meta.id}`)
+      }
       restoreTeam(meta)
       restored.push(meta.id)
       console.log(`[rehydrate] restored team ${meta.id} (${meta.name}) from meta`)

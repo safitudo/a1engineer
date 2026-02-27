@@ -50,6 +50,14 @@ function getTenantByKeyHash(plaintext) {
   return null
 }
 
+// Restore a tenant with a known id (used during rehydration to preserve tenantId mapping)
+export function restoreTenant(apiKey, id) {
+  if (tenants.has(apiKey)) return tenants.get(apiKey)
+  const tenant = { id, apiKey, createdAt: new Date().toISOString() }
+  tenants.set(apiKey, tenant)
+  return tenant
+}
+
 export function listTenants() {
   return [...tenants.values(), ...signupTenants.values()]
 }
