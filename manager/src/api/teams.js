@@ -24,7 +24,7 @@ router.post('/', async (req, res) => {
     if (!a.role) return res.status(400).json({ error: 'each agent must have a role', code: 'MISSING_AGENT_ROLE' })
   }
 
-  const team = teamStore.createTeam(config)
+  const team = teamStore.createTeam(config, { tenantId: req.tenantId })
   try {
     await startTeam(team, { apiKey: config.auth?.apiKey })
     teamStore.updateTeam(team.id, { status: 'running' })
@@ -37,15 +37,18 @@ router.post('/', async (req, res) => {
   }
 })
 
-// GET /api/teams — list all teams
-router.get('/', (_req, res) => {
-  res.json(teamStore.listTeams())
+// GET /api/teams — list teams (filtered by tenant)
+router.get('/', (req, res) => {
+  res.json(teamStore.listTeams({ tenantId: req.tenantId }))
 })
 
 // GET /api/teams/:id — team detail
 router.get('/:id', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  if (req.tenantId && team.tenantId !== req.tenantId) {
+    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
   res.json(team)
 })
 
@@ -53,6 +56,9 @@ router.get('/:id', (req, res) => {
 router.patch('/:id', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  if (req.tenantId && team.tenantId !== req.tenantId) {
+    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
 
   const { name, auth } = req.body ?? {}
   const updates = {}
@@ -77,6 +83,9 @@ router.patch('/:id', (req, res) => {
 router.get('/:id/overview', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  if (req.tenantId && team.tenantId !== req.tenantId) {
+    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
 
   const now = Date.now()
   const agents = (team.agents ?? []).map(a => {
@@ -114,6 +123,9 @@ router.get('/:id/overview', (req, res) => {
 router.delete('/:id', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  if (req.tenantId && team.tenantId !== req.tenantId) {
+    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
 
   destroyGateway(req.params.id)
   try {

@@ -1,6 +1,7 @@
 import express from 'express'
 import { getTeam, updateTeam } from '../store/teams.js'
 import { broadcastHeartbeat } from './ws.js'
+import { requireAuth, requireTeamOwnership } from '../middleware/auth.js'
 import teamsRouter from './teams.js'
 import agentsRouter from './agents.js'
 import channelsRouter from './channels.js'
@@ -9,7 +10,7 @@ export function createApp() {
   const app = express()
   app.use(express.json())
 
-  // POST /heartbeat/:teamId/:agentId — keep-alive from agent containers
+  // POST /heartbeat/:teamId/:agentId — keep-alive from agent containers (no auth)
   app.post('/heartbeat/:teamId/:agentId', (req, res) => {
     const { teamId, agentId } = req.params
     const team = getTeam(teamId)
@@ -26,10 +27,10 @@ export function createApp() {
     return res.json({ ok: true, at: now })
   })
 
-  // REST API
-  app.use('/api/teams', teamsRouter)
-  app.use('/api/teams/:id/agents', agentsRouter)
-  app.use('/api/teams/:id/channels', channelsRouter)
+  // REST API — tenant-scoped
+  app.use('/api/teams', requireAuth, requireTeamOwnership, teamsRouter)
+  app.use('/api/teams/:id/agents', requireAuth, requireTeamOwnership, agentsRouter)
+  app.use('/api/teams/:id/channels', requireAuth, requireTeamOwnership, channelsRouter)
 
   // 404 catch-all
   app.use((_req, res) => {

@@ -16,10 +16,11 @@ function normalizeAuth(auth) {
 }
 const store = new Map()
 
-export function createTeam(config) {
+export function createTeam(config, { tenantId = null } = {}) {
   const id = randomUUID()
   const team = {
     id,
+    tenantId,
     name: config.name,
     repo: config.repo,
     github: config.github ?? null,
@@ -48,8 +49,10 @@ export function getTeam(id) {
   return store.get(id) ?? null
 }
 
-export function listTeams() {
-  return Array.from(store.values())
+export function listTeams({ tenantId = null } = {}) {
+  const all = Array.from(store.values())
+  if (tenantId) return all.filter(t => t.tenantId === tenantId)
+  return all
 }
 
 export function updateTeam(id, updates) {

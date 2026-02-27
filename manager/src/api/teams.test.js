@@ -34,6 +34,7 @@ function request(port, method, path, body) {
       method,
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-api-key-123',
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
       },
     }
@@ -56,6 +57,34 @@ function get(port, path) { return request(port, 'GET', path) }
 function post(port, path, body) { return request(port, 'POST', path, body) }
 function patch(port, path, body) { return request(port, 'PATCH', path, body) }
 function del(port, path) { return request(port, 'DELETE', path) }
+
+function requestNoAuth(port, method, path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body ? JSON.stringify(body) : null
+    const opts = {
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+    }
+    const req = http.request(opts, (res) => {
+      let data = ''
+      res.on('data', (c) => { data += c })
+      res.on('end', () => {
+        let parsed
+        try { parsed = JSON.parse(data) } catch { parsed = data }
+        resolve({ status: res.statusCode, body: parsed })
+      })
+    })
+    req.on('error', reject)
+    if (payload) req.write(payload)
+    req.end()
+  })
+}
 
 // ── Test setup ────────────────────────────────────────────────────────────────
 
@@ -358,6 +387,50 @@ describe('POST /heartbeat/:teamId/:agentId', () => {
     const res = await post(port, '/heartbeat/nope/agent-1')
     expect(res.status).toBe(404)
     expect(res.body.code).toBe('NOT_FOUND')
+  })
+})
+
+// ── Tenant auth ──────────────────────────────────────────────────────────────
+
+describe('tenant auth', () => {
+  it('returns 401 when no Authorization header', async () => {
+    const res = await requestNoAuth(port, 'GET', '/api/teams')
+    expect(res.status).toBe(401)
+    expect(res.body.code).toBe('UNAUTHORIZED')
+  })
+
+  it('returns 401 for empty Bearer token', async () => {
+    const res = await requestNoAuth(port, 'GET', '/api/teams')
+    expect(res.status).toBe(401)
+  })
+
+  it('heartbeat does not require auth', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const team = created.body
+    const agentId = team.agents[0].id
+    const res = await requestNoAuth(port, 'POST', `/heartbeat/${team.id}/${agentId}`)
+    expect(res.status).toBe(200)
+  })
+
+  it('tenant isolation — different key cannot see other teams', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    expect(created.status).toBe(201)
+
+    // Request with different key
+    const res = await new Promise((resolve, reject) => {
+      const opts = {
+        hostname: '127.0.0.1', port, path: `/api/teams/${created.body.id}`, method: 'GET',
+        headers: { 'Authorization': 'Bearer other-tenant-key-456', 'Content-Type': 'application/json' },
+      }
+      const req = http.request(opts, (r) => {
+        let data = ''
+        r.on('data', (c) => { data += c })
+        r.on('end', () => { resolve({ status: r.statusCode, body: JSON.parse(data) }) })
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    expect(res.status).toBe(404)
   })
 })
 
