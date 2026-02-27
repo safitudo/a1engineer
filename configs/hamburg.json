@@ -17,6 +17,7 @@
   "ergo": {
     "image": "a1-ergo:latest",
     "configPath": "./templates/ergo/ircd.yaml",
-    "port": 6667
+    "port": 6667,
+    "hostPort": 6667
   }
 }

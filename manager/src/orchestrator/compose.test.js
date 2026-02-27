@@ -140,6 +140,21 @@ describe('renderCompose — api-key auth', () => {
   })
 })
 
+describe('renderCompose — ergo hostPort', () => {
+  it('exposes host port when ergo.hostPort is set', async () => {
+    const yaml = await renderCompose({
+      ...BASE_CONFIG,
+      ergo: { ...BASE_CONFIG.ergo, hostPort: 16667 },
+    })
+    expect(yaml).toContain('"16667:6667"')
+  })
+
+  it('does not expose ports when hostPort is omitted', async () => {
+    const yaml = await renderCompose({ ...BASE_CONFIG })
+    expect(yaml).not.toContain('ports:')
+  })
+})
+
 describe('renderCompose — invalid auth', () => {
   it('throws for unknown auth mode', async () => {
     await expect(

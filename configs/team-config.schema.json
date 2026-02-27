@@ -88,6 +88,12 @@
           "type": "integer",
           "description": "IRC port exposed on the internal Docker network.",
           "default": 6667
+        },
+        "hostPort": {
+          "type": "integer",
+          "description": "Host port to expose for direct IRC client access (e.g., Halloy). If set, Ergo is reachable at localhost:<hostPort>. Omit to keep IRC internal-only.",
+          "minimum": 1024,
+          "maximum": 65535
         }
       }
     }
