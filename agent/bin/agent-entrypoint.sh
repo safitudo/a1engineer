@@ -81,7 +81,7 @@ export MODEL="${MODEL:-sonnet}"
 
 # ── Fix permissions for non-root agent user ─────────────────────────────────
 chown -R agent:agent "$AGENT_HOME" 2>/dev/null || true
-chown -R agent:agent /git 2>/dev/null || true
+chown -R agent:agent "$WORK_DIR" 2>/dev/null || true
 chown agent:agent /tmp/prompt.md 2>/dev/null || true
 
 # ── Git config for agent user ───────────────────────────────────────────────
@@ -94,7 +94,7 @@ case "$AGENT_RUNTIME" in
     cat > /tmp/launch-agent.sh <<'LAUNCH'
 #!/usr/bin/env bash
 if [ -f /tmp/prompt.md ]; then
-  exec claude --dangerously-skip-permissions --model "$MODEL" -- "$(cat /tmp/prompt.md)"
+  exec claude --dangerously-skip-permissions --model "$MODEL" --prompt-file /tmp/prompt.md
 else
   exec claude --dangerously-skip-permissions --model "$MODEL"
 fi
