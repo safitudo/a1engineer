@@ -56,19 +56,22 @@ export default function IrcFeed({ teamId }) {
 
       if (cancelled) return
 
-      const url = token ? `${WS_BASE}/ws?token=${encodeURIComponent(token)}` : `${WS_BASE}/ws`
-      const ws = new WebSocket(url)
+      const ws = new WebSocket(`${WS_BASE}/ws`)
       wsRef.current = ws
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'subscribe', teamId }))
+        // Send auth as first message — token never appears in the URL
+        ws.send(JSON.stringify({ type: 'auth', token }))
       }
 
       ws.onmessage = (event) => {
         let msg
         try { msg = JSON.parse(event.data) } catch { return }
 
-        if (msg.type === 'subscribed') {
+        if (msg.type === 'authenticated') {
+          // Auth accepted — now subscribe to the team's IRC feed
+          ws.send(JSON.stringify({ type: 'subscribe', teamId }))
+        } else if (msg.type === 'subscribed') {
           setStatus('connected')
         } else if (msg.type === 'message') {
           setMessages(prev => {
@@ -76,7 +79,7 @@ export default function IrcFeed({ teamId }) {
             return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
           })
         }
-        // heartbeat / agent_status not shown in this feed
+        // heartbeat / agent_status / error not shown in this feed
       }
 
       ws.onerror = () => setStatus('disconnected')
