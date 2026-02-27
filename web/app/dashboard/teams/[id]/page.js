@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import IrcFeed from '../../../../components/IrcFeed'
+import AgentConsole from '../../../../components/AgentConsole'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ function timeAgo(ts) {
 
 // ── Agent card ────────────────────────────────────────────────────────────────
 
-function AgentCard({ agent }) {
+function AgentCard({ agent, isSelected, onToggle }) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 10_000)
@@ -78,7 +79,12 @@ function AgentCard({ agent }) {
   }, [])
 
   return (
-    <div className="bg-[#0d1117] border border-[#30363d] rounded-lg p-4">
+    <div
+      className={`bg-[#0d1117] border rounded-lg p-4 cursor-pointer transition-colors ${
+        isSelected ? 'border-[#3fb950]/60 ring-1 ring-[#3fb950]/20' : 'border-[#30363d] hover:border-[#8b949e]/50'
+      }`}
+      onClick={onToggle}
+    >
       <div className="flex items-start justify-between gap-2 mb-3">
         <div>
           <div className="text-sm font-semibold text-white font-mono">{agent.id}</div>
@@ -94,6 +100,9 @@ function AgentCard({ agent }) {
           model: {agent.model}
         </div>
       )}
+      <div className="mt-2 text-[10px] font-mono text-[#8b949e]">
+        {isSelected ? '▼ console open' : '▶ click for console'}
+      </div>
     </div>
   )
 }
@@ -109,6 +118,7 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [stopping, setStopping] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState(null)
 
   // ── Fetch team ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -204,13 +214,29 @@ export default function TeamDetailPage() {
           {agents.length === 0 ? (
             <div className="text-xs text-[#8b949e] font-mono italic">No agents configured.</div>
           ) : (
-            agents.map(agent => <AgentCard key={agent.id} agent={agent} />)
+            agents.map(agent => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                isSelected={selectedAgent === agent.id}
+                onToggle={() => setSelectedAgent(prev => prev === agent.id ? null : agent.id)}
+              />
+            ))
           )}
         </aside>
 
-        {/* Right: IRC feed — uses canonical IrcFeed component with direct Manager WS */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <IrcFeed teamId={id} />
+        {/* Right: IRC feed + agent console */}
+        <div className="flex-1 flex flex-col min-w-0 gap-4">
+          {selectedAgent && (
+            <AgentConsole
+              teamId={id}
+              agentId={selectedAgent}
+              onClose={() => setSelectedAgent(null)}
+            />
+          )}
+          <div className="flex-1 flex flex-col min-w-0">
+            <IrcFeed teamId={id} />
+          </div>
         </div>
       </div>
     </div>
