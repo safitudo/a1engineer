@@ -153,7 +153,11 @@ export async function startTeam(teamConfig, opts = {}) {
 }
 
 export async function stopTeam(teamId) {
-  const composePath = join(TEAMS_DIR, teamId, 'docker-compose.yml')
+  const teamDir = join(TEAMS_DIR, teamId)
+  const composePath = join(teamDir, 'docker-compose.yml')
   await execFileAsync('docker', ['compose', '-f', composePath, 'down', '--remove-orphans'])
+  // Clean up team directory so list-teams doesn't show stale entries
+  const { rm } = await import('fs/promises')
+  await rm(teamDir, { recursive: true, force: true })
   console.log(`[compose] team ${teamId} stopped`)
 }
