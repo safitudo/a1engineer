@@ -47,18 +47,20 @@ export function broadcastAgentStatus(teamId, agentId, status) {
  *
  * Only upgrades on path `/ws` are accepted; all others get a 400 close.
  *
- * Client → server protocol:
- *   { type: 'subscribe', teamId: string }   — subscribe (or re-subscribe) to a team
+ * Client → server protocol (in order):
+ *   { type: 'auth',      token: string }     — MUST be first message; authenticates the connection
+ *   { type: 'subscribe', teamId: string }    — subscribe (or re-subscribe) to a team
  *
  * Server → client protocol:
+ *   { type: 'authenticated' }                — auth accepted
  *   { type: 'subscribed', teamId }           — subscription confirmed
  *   { type: 'message',    teamId, channel, nick, text, time, tag, tagBody }
  *   { type: 'heartbeat',  teamId, agentId, timestamp }
  *   { type: 'agent_status', teamId, agentId, status }
- *   { type: 'error',      code, message }
+ *   { type: 'error',      code, message }    — fatal errors close the connection
  *
- * Auth: the client must send a valid teamId that exists in the team store.
- * This mirrors the REST API's tenant scoping (no team → 404 style rejection).
+ * Auth: the client sends { type: 'auth', token } as its first message.
+ * The token never appears in the URL — it stays in the WS frame payload only.
  * Idempotent — calling again after the first attach is a no-op.
  */
 export function attachWebSocketServer(server) {
@@ -73,6 +75,7 @@ export function attachWebSocketServer(server) {
 
   wss.on('connection', (ws) => {
     let currentTeamId = null
+    let authenticated = false
 
     ws.on('message', (raw) => {
       let msg
@@ -80,9 +83,36 @@ export function attachWebSocketServer(server) {
         msg = JSON.parse(raw)
       } catch {
         ws.send(JSON.stringify({ type: 'error', code: 'INVALID_JSON', message: 'message must be JSON' }))
+        ws.close()
         return
       }
 
+      // Auth handshake — must be first message
+      if (!authenticated) {
+        if (msg.type !== 'auth') {
+          ws.send(JSON.stringify({ type: 'error', code: 'UNAUTHENTICATED', message: 'first message must be { type: "auth", token }' }))
+          ws.close()
+          return
+        }
+        const token = msg.token
+        if (!token || typeof token !== 'string') {
+          ws.send(JSON.stringify({ type: 'error', code: 'MISSING_TOKEN', message: 'token required' }))
+          ws.close()
+          return
+        }
+        const tenant = findByApiKey(token)
+        if (!tenant) {
+          ws.send(JSON.stringify({ type: 'error', code: 'UNAUTHORIZED', message: 'invalid token' }))
+          ws.close()
+          return
+        }
+        ws.tenant = tenant
+        authenticated = true
+        ws.send(JSON.stringify({ type: 'authenticated' }))
+        return
+      }
+
+      // Post-auth messages
       if (msg.type !== 'subscribe') {
         ws.send(JSON.stringify({ type: 'error', code: 'UNKNOWN_TYPE', message: `unknown type: ${msg.type}` }))
         return
@@ -145,26 +175,8 @@ export function attachWebSocketServer(server) {
       return
     }
 
-    // Authenticate via query param: /ws?token=<apiKey>
-    const token = new URL(req.url, 'http://localhost').searchParams.get('token')
-    if (!token) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
-      socket.destroy()
-      return
-    }
-
-    const tenant = findByApiKey(token)
-    if (!tenant) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
-      socket.destroy()
-      return
-    }
-
-    // Attach tenant info to request for downstream use
-    req.tenant = tenant
-
+    // Accept upgrade — auth happens via first WS message (token never in URL)
     wss.handleUpgrade(req, socket, head, (ws) => {
-      ws.tenant = tenant
       wss.emit('connection', ws, req)
     })
   })
