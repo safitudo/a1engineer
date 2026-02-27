@@ -108,16 +108,36 @@ async function main() {
         }
       } catch { /* Manager not running — fall through */ }
 
-      // Fallback: direct mode (by UUID only)
+      // Fallback: direct mode — resolve name by scanning compose dirs
+      let resolvedId = teamId
       const composePath = join(TEAMS_DIR, teamId, 'docker-compose.yml')
       try { await access(composePath) } catch {
-        console.error(`Team not found: ${teamId} (no compose file at ${composePath})`)
-        process.exit(1)
+        // Not a UUID match — scan dirs for team name
+        let found = false
+        try {
+          const dirs = await readdir(TEAMS_DIR)
+          for (const d of dirs) {
+            const cp = join(TEAMS_DIR, d, 'docker-compose.yml')
+            try {
+              const yml = await readFile(cp, 'utf8')
+              const nameMatch = yml.match(/^# Team: (.+?) \(/m)
+              if (nameMatch && nameMatch[1] === rawId) {
+                resolvedId = d
+                found = true
+                break
+              }
+            } catch { /* skip */ }
+          }
+        } catch { /* dir doesn't exist */ }
+        if (!found) {
+          console.error(`Team not found: ${rawId}`)
+          process.exit(1)
+        }
       }
-      console.log(`Stopping team ${teamId}…`)
-      await stopTeam(teamId)
-      teamStore.deleteTeam(teamId)
-      console.log(`Team ${teamId} destroyed.`)
+      console.log(`Stopping team ${resolvedId}…`)
+      await stopTeam(resolvedId)
+      teamStore.deleteTeam(resolvedId)
+      console.log(`Team ${resolvedId} destroyed.`)
       break
     }
 
