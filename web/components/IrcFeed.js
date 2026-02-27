@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 
 // Manager WebSocket URL — Next.js rewrites don't proxy WS upgrades,
 // so connect directly to the manager. Override with NEXT_PUBLIC_WS_URL in production.
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:3001'
+const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8080'
 
 // Deterministic color per nick
 const NICK_COLORS = ['#3fb950', '#79c0ff', '#d2a8ff', '#ffa657', '#ff7b72', '#a5d6ff']
