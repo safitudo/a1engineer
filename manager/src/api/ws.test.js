@@ -4,7 +4,7 @@ import WebSocket from 'ws'
 import { createApp } from './index.js'
 import { attachWebSocketServer } from './ws.js'
 import { listTeams, deleteTeam } from '../store/teams.js'
-import { findByApiKey } from '../store/tenants.js'
+import { findByApiKey, upsertTenant } from '../store/tenants.js'
 
 // Mock compose to avoid Docker calls
 vi.mock('../orchestrator/compose.js', () => ({
@@ -27,7 +27,8 @@ vi.mock('../irc/router.js', () => ({
   registerBroadcaster: vi.fn().mockReturnValue(() => {}),
 }))
 
-// Mock tenant store so we control findByApiKey
+// Mock tenant store — only findByApiKey is used by ws.js (#63: upsertTenant
+// must never be called on WS connect, as it auto-creates tenants for any key)
 vi.mock('../store/tenants.js', () => ({
   findByApiKey: vi.fn(),
   upsertTenant: vi.fn(),
@@ -117,6 +118,17 @@ describe('WebSocket first-message auth', () => {
     const { ws } = await wsConnect()
     const resp = await sendAndReceive(ws, { type: 'auth', token: 'valid-key-123' })
     expect(resp.type).toBe('authenticated')
+    ws.close()
+  })
+
+  // Regression test for #63: upsertTenant() auto-creates tenants for any key,
+  // so it must never be called during WS auth. Only findByApiKey() is allowed —
+  // it returns null for unknown keys, closing the connection.
+  it('never calls upsertTenant during auth (regression #63)', async () => {
+    findByApiKey.mockReturnValue(null)
+    const { ws } = await wsConnect()
+    await sendAndReceive(ws, { type: 'auth', token: 'arbitrary-key' })
+    expect(upsertTenant).not.toHaveBeenCalled()
     ws.close()
   })
 })
