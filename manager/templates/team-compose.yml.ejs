@@ -39,7 +39,7 @@ services:
     environment:
       REPO_URL: <%- JSON.stringify(repo.url) %>
       REPO_BRANCH: <%- JSON.stringify(repo.branch) %>
-      AGENTS: <%- JSON.stringify(JSON.stringify(agents.map(function(a){ return { role: a.role, city: team.name }; }))) %>
+      AGENTS: <%- JSON.stringify(JSON.stringify(agents.map(function(a){ return { id: a.id, role: a.role, city: team.name }; }))) %>
 <% if (repo.githubToken) { -%>
       GITHUB_TOKEN: <%- JSON.stringify(repo.githubToken) %>
 <% } -%>
@@ -56,7 +56,7 @@ services:
 <% if (auth.mode === 'session') { -%>
       - type: bind
         source: <%- auth.resolvedPath %>
-        target: /root/.claude
+        target: /root/.claude-host
         read_only: true
 <% } -%>
     working_dir: "/git/worktrees/<%- agent.id %>"

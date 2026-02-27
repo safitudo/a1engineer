@@ -2,7 +2,8 @@ FROM node:22-slim
 
 RUN apt-get update && apt-get install -y \
     git tmux curl jq openssh-client \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash agent
 
 WORKDIR /usr/local/lib/a1
 
