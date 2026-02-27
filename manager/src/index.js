@@ -24,6 +24,7 @@ import { startTeam, stopTeam, rehydrateTeams } from './orchestrator/compose.js'
 import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'
 import { startNudger } from './watchdog/nudger.js'
+import { startTokenRefresh } from './watchdog/token-refresh.js'
 
 const [, , command, ...rest] = process.argv
 
@@ -181,6 +182,8 @@ async function main() {
       })
       attachWebSocketServer(server)
       startNudger()
+      // Token refresh must start AFTER rehydration populates the team store
+      setTimeout(() => startTokenRefresh(), 5000)
       break
     }
 
