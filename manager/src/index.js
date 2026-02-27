@@ -83,31 +83,42 @@ async function main() {
     }
 
     case 'destroy-team': {
-      const { id, port = '8080' } = parseArgs(rest)
-      if (!id) {
-        console.error('Usage: destroy-team --id <team-id>')
+      const { id: rawId, port = '8080' } = parseArgs(rest)
+      if (!rawId) {
+        console.error('Usage: destroy-team --id <team-id-or-name>')
         process.exit(1)
       }
 
-      // Try Manager API first
+      // Resolve name → id via Manager API if available
+      let teamId = rawId
       try {
-        const resp = await fetch(`http://localhost:${port}/api/teams/${id}`, { method: 'DELETE' })
-        if (resp.ok || resp.status === 204) {
-          console.log(`Team ${id} destroyed via Manager API.`)
-          break
+        const listResp = await fetch(`http://localhost:${port}/api/teams`)
+        if (listResp.ok) {
+          const teams = await listResp.json()
+          const match = teams.find(t => t.id === rawId || t.name === rawId)
+          if (match) {
+            teamId = match.id
+            const delResp = await fetch(`http://localhost:${port}/api/teams/${teamId}`, { method: 'DELETE' })
+            if (delResp.ok || delResp.status === 204) {
+              console.log(`Team ${teamId} (${match.name}) destroyed via Manager API.`)
+              break
+            }
+          } else {
+            console.error(`No team matching "${rawId}" in Manager.`)
+          }
         }
       } catch { /* Manager not running — fall through */ }
 
-      // Fallback: direct mode
-      const composePath = join(TEAMS_DIR, id, 'docker-compose.yml')
+      // Fallback: direct mode (by UUID only)
+      const composePath = join(TEAMS_DIR, teamId, 'docker-compose.yml')
       try { await access(composePath) } catch {
-        console.error(`Team not found: ${id} (no compose file at ${composePath})`)
+        console.error(`Team not found: ${teamId} (no compose file at ${composePath})`)
         process.exit(1)
       }
-      console.log(`Stopping team ${id}…`)
-      await stopTeam(id)
-      teamStore.deleteTeam(id)
-      console.log(`Team ${id} destroyed.`)
+      console.log(`Stopping team ${teamId}…`)
+      await stopTeam(teamId)
+      teamStore.deleteTeam(teamId)
+      console.log(`Team ${teamId} destroyed.`)
       break
     }
 
