@@ -2,24 +2,18 @@
 set -e
 
 # ── Headless environment ────────────────────────────────────────────────────
-# These must be set BEFORE starting tmux so the child shell inherits them.
-export IS_DEMO=1                          # Skip onboarding / theme wizard
-export DISABLE_AUTOUPDATER=1              # No auto-update prompts
-export DISABLE_TELEMETRY=1                # No telemetry in containers
-export DISABLE_ERROR_REPORTING=1          # No error reporting in containers
+export IS_DEMO=1
+export DISABLE_AUTOUPDATER=1
+export DISABLE_TELEMETRY=1
+export DISABLE_ERROR_REPORTING=1
 export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE="${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:-35}"
 export ENABLE_TOOL_SEARCH="${ENABLE_TOOL_SEARCH:-auto:5}"
+export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_CODE_EFFORT_LEVEL:-high}"
 
 AGENT_HOME="/home/agent"
-
-# ── Workspace ───────────────────────────────────────────────────────────────
-# WORKTREE_PATH is the per-agent checkout; fall back to WORKSPACE (/git).
 WORKSPACE="${WORKSPACE:-/git}"
 WORK_DIR="${WORKTREE_PATH:-$WORKSPACE}"
-
-if [ -d "$WORK_DIR" ]; then
-  cd "$WORK_DIR"
-fi
+[ -d "$WORK_DIR" ] && cd "$WORK_DIR"
 
 # ── Git identity ────────────────────────────────────────────────────────────
 GIT_NAME="${GIT_NAME:-a1-agent}"
@@ -27,15 +21,10 @@ GIT_EMAIL="${GIT_EMAIL:-agent@a1engineer.dev}"
 git config --global user.name "$GIT_NAME"
 git config --global user.email "$GIT_EMAIL"
 
-# ── .claude session — copy read-only host mount into writable location ──────
+# ── Claude session dir ──────────────────────────────────────────────────────
 mkdir -p "$AGENT_HOME/.claude"
-if [ -d /root/.claude-host ]; then
-  cp -a /root/.claude-host/. "$AGENT_HOME/.claude/"
-fi
+[ -d /root/.claude-host ] && cp -a /root/.claude-host/. "$AGENT_HOME/.claude/"
 
-# ── .claude/settings.json ───────────────────────────────────────────────────
-# skipDangerousModePermissionPrompt: suppress the interactive confirmation
-# that --dangerously-skip-permissions normally shows on first use.
 cat > "$AGENT_HOME/.claude/settings.json" <<'EOF'
 {
   "skipDangerousModePermissionPrompt": true,
@@ -48,72 +37,121 @@ cat > "$AGENT_HOME/.claude/settings.json" <<'EOF'
 }
 EOF
 
-# ── Inject API keys from Docker secrets (if present) ────────────────────
+# ── Inject secrets ──────────────────────────────────────────────────────────
 [ -f /run/secrets/anthropic_key ] && export ANTHROPIC_API_KEY=$(cat /run/secrets/anthropic_key)
 [ -f /run/secrets/github_token ]  && export GITHUB_TOKEN=$(cat /run/secrets/github_token)
 
-# ── Git HTTPS auth via token (GitHub App or PAT) ───────────────────────
-# Uses .netrc so the token never appears in git remote URLs or ps output.
-if [ -n "$GITHUB_TOKEN" ]; then
+# ── Git HTTPS auth (.netrc) ─────────────────────────────────────────────────
+if [ -n "${GITHUB_TOKEN:-}" ]; then
   printf 'machine github.com\nlogin x-access-token\npassword %s\n' "$GITHUB_TOKEN" > "$AGENT_HOME/.netrc"
   chmod 600 "$AGENT_HOME/.netrc"
-  # Also set for root (git-init may have already configured this)
   cp "$AGENT_HOME/.netrc" /root/.netrc 2>/dev/null || true
 fi
 
-# ── Role-specific config from filesystem ────────────────────────────────────
-# .context/agents/{role}/config.json → model override
-# .context/agents/{role}/prompt.md   → role prompt (preferred over AGENT_PROMPT)
-ROLE_DIR="$WORK_DIR/.context/agents/$IRC_ROLE"
-
+# ── Role-specific config from repo ──────────────────────────────────────────
+ROLE_DIR="$WORK_DIR/.context/agents/${IRC_ROLE:-}"
 if [ -d "$ROLE_DIR" ]; then
-  # Model override from config.json
-  if [ -f "$ROLE_DIR/config.json" ]; then
+  [ -f "$ROLE_DIR/config.json" ] && {
     CONFIG_MODEL=$(jq -r '.model // empty' "$ROLE_DIR/config.json" 2>/dev/null)
-    if [ -n "$CONFIG_MODEL" ]; then
-      MODEL="$CONFIG_MODEL"
-    fi
-  fi
-
-  # Prompt from filesystem (takes priority over AGENT_PROMPT env var)
-  if [ -f "$ROLE_DIR/prompt.md" ]; then
-    AGENT_PROMPT=$(cat "$ROLE_DIR/prompt.md")
-  fi
+    [ -n "$CONFIG_MODEL" ] && MODEL="$CONFIG_MODEL"
+  }
+  [ -f "$ROLE_DIR/prompt.md" ] && AGENT_PROMPT=$(cat "$ROLE_DIR/prompt.md")
 fi
 
-# ── Agent prompt ────────────────────────────────────────────────────────────
-if [ -n "$AGENT_PROMPT" ]; then
-  printf '%s' "$AGENT_PROMPT" > /tmp/prompt.md
-fi
+# ── Write prompt file ──────────────────────────────────────────────────────
+[ -n "${AGENT_PROMPT:-}" ] && printf '%s' "$AGENT_PROMPT" > /tmp/prompt.md
 
-# ── Resolve runtime + model defaults ───────────────────────────────────────
+# ── Defaults ────────────────────────────────────────────────────────────────
 export AGENT_RUNTIME="${AGENT_RUNTIME:-claude-code}"
 export MODEL="${MODEL:-sonnet}"
 
-# ── Fix permissions for non-root agent user ─────────────────────────────────
-chown -R agent:agent "$AGENT_HOME" 2>/dev/null || true
-chown -R agent:agent "$WORK_DIR" 2>/dev/null || true
-chown agent:agent /tmp/prompt.md 2>/dev/null || true
+# ── Write env file (survives su + tmux boundary) ───────────────────────────
+cat > /tmp/agent-env.sh <<ENVEOF
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+export GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+export MODEL="${MODEL:-sonnet}"
+export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_CODE_EFFORT_LEVEL:-high}"
+export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE="${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:-35}"
+export ENABLE_TOOL_SEARCH="${ENABLE_TOOL_SEARCH:-auto:5}"
+export IS_DEMO="${IS_DEMO:-1}"
+export DISABLE_AUTOUPDATER="${DISABLE_AUTOUPDATER:-1}"
+export DISABLE_TELEMETRY="${DISABLE_TELEMETRY:-1}"
+export DISABLE_ERROR_REPORTING="${DISABLE_ERROR_REPORTING:-1}"
+export IRC_HOST="${IRC_HOST:-}"
+export IRC_PORT="${IRC_PORT:-6667}"
+export IRC_NICK="${IRC_NICK:-}"
+export IRC_ROLE="${IRC_ROLE:-}"
+export CITY="${CITY:-}"
+export TEAM_ID="${TEAM_ID:-}"
+export MANAGER_URL="${MANAGER_URL:-}"
+export HEARTBEAT_URL="${HEARTBEAT_URL:-}"
+ENVEOF
+chmod 644 /tmp/agent-env.sh
 
-# ── Git config for agent user ───────────────────────────────────────────────
-su -s /bin/bash agent -c "git config --global user.name '$GIT_NAME' && git config --global user.email '$GIT_EMAIL'"
-
-# ── Write launch script ────────────────────────────────────────────────────
-# Using a script avoids tmux send-keys quoting issues with prompt content.
+# ── Write runtime-specific launch script ────────────────────────────────────
+# Runs INSIDE tmux. For API-key Claude Code, uses --print --continue loop.
+# For session auth or other runtimes, runs interactively.
 case "$AGENT_RUNTIME" in
   claude-code)
-    cat > /tmp/launch-agent.sh <<'LAUNCH'
+    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+      # API key mode: --print --continue loop (API keys don't work in interactive mode)
+      touch /tmp/agent-mode-print  # signal to sidecar
+      cat > /tmp/launch-agent.sh <<'LAUNCH'
 #!/usr/bin/env bash
+source /tmp/agent-env.sh 2>/dev/null || true
+
+PROMPT=""
+[ -f /tmp/prompt.md ] && PROMPT=$(cat /tmp/prompt.md)
+SESSION_ID=""
+INBOX="/tmp/agent-inbox.txt"
+
+# Initial prompt
+if [ -n "$PROMPT" ]; then
+  echo "[agent] sending initial prompt..."
+  RESULT=$(claude --print --dangerously-skip-permissions --model "$MODEL" \
+    --output-format json "$PROMPT" 2>&1)
+  SESSION_ID=$(echo "$RESULT" | jq -r '.session_id // empty' 2>/dev/null)
+  echo "$RESULT" | jq -r '.result // empty' 2>/dev/null
+  echo "[agent] session=$SESSION_ID"
+fi
+
+# Main loop: pick up new messages from sidecar
+echo "[agent] entering loop, watching $INBOX"
+while true; do
+  if [ -s "$INBOX" ]; then
+    MSG=$(cat "$INBOX")
+    : > "$INBOX"  # clear
+    echo "[agent] processing: ${MSG:0:80}..."
+    if [ -n "$SESSION_ID" ]; then
+      RESULT=$(claude --print --dangerously-skip-permissions --model "$MODEL" \
+        --output-format json --resume "$SESSION_ID" "$MSG" 2>&1)
+    else
+      RESULT=$(claude --print --dangerously-skip-permissions --model "$MODEL" \
+        --output-format json "$MSG" 2>&1)
+      SESSION_ID=$(echo "$RESULT" | jq -r '.session_id // empty' 2>/dev/null)
+    fi
+    echo "$RESULT" | jq -r '.result // empty' 2>/dev/null
+  fi
+  sleep 3
+done
+LAUNCH
+    else
+      # Session auth: interactive mode works
+      cat > /tmp/launch-agent.sh <<'LAUNCH'
+#!/usr/bin/env bash
+source /tmp/agent-env.sh 2>/dev/null || true
 if [ -f /tmp/prompt.md ]; then
-  exec claude --dangerously-skip-permissions --model "$MODEL" --prompt-file /tmp/prompt.md
+  exec claude --dangerously-skip-permissions --model "$MODEL" "$(cat /tmp/prompt.md)"
 else
   exec claude --dangerously-skip-permissions --model "$MODEL"
 fi
 LAUNCH
+    fi
     ;;
   codex)
     cat > /tmp/launch-agent.sh <<'LAUNCH'
 #!/usr/bin/env bash
+source /tmp/agent-env.sh 2>/dev/null || true
 if [ -f /tmp/prompt.md ]; then
   exec codex --model "$MODEL" --instructions "$(cat /tmp/prompt.md)"
 else
@@ -126,17 +164,26 @@ LAUNCH
     exit 1
     ;;
 esac
-
 chmod +x /tmp/launch-agent.sh
 
-# ── Start tmux + agent as non-root user ─────────────────────────────────────
-# Claude Code refuses --dangerously-skip-permissions when running as root,
-# so we drop to the 'agent' user for the actual session.
+# ── Fix permissions ─────────────────────────────────────────────────────────
+chown -R agent:agent "$AGENT_HOME" 2>/dev/null || true
+chown -R agent:agent "$WORK_DIR" 2>/dev/null || true
+chown agent:agent /tmp/prompt.md 2>/dev/null || true
+touch /tmp/agent-inbox.txt && chown agent:agent /tmp/agent-inbox.txt
+
+# ── Git config for agent user ───────────────────────────────────────────────
+su -s /bin/bash agent -c "git config --global user.name '$GIT_NAME' && git config --global user.email '$GIT_EMAIL'"
+
+# ── Start tmux + agent ──────────────────────────────────────────────────────
 su -s /bin/bash agent -c "
   cd '$WORK_DIR' 2>/dev/null || true
   tmux new-session -d -s agent
   tmux send-keys -t agent '/tmp/launch-agent.sh' Enter
 "
 
-# ── Keep container alive ───────────────────────────────────────────────────
+# ── Start sidecar (background) ──────────────────────────────────────────────
+/usr/local/bin/sidecar.sh &
+
+# ── Keep container alive ────────────────────────────────────────────────────
 exec tail -f /dev/null

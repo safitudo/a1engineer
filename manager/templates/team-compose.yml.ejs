@@ -72,6 +72,7 @@ services:
       CITY: "<%- team.name %>"
       AGENT_RUNTIME: "<%- agent.runtime %>"
       MODEL: "<%- agent.model %>"
+      CLAUDE_CODE_EFFORT_LEVEL: "<%- agent.effort || 'high' %>"
       TEAM_ID: "<%- team.id %>"
       MANAGER_URL: "http://manager:8080"
       HEARTBEAT_URL: "http://manager:8080/heartbeat/<%- team.id %>/<%- agent.id %>"

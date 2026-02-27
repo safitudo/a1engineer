@@ -1,6 +1,24 @@
 import { readFile, readdir, access } from 'fs/promises'
-import { resolve, join } from 'path'
+import { readFileSync } from 'fs'
+import { resolve, join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import * as teamStore from './store/teams.js'
+
+// ── Load .env from project root ──────────────────────────────────────────────
+const __dirname_idx = dirname(fileURLToPath(import.meta.url))
+const envPath = resolve(__dirname_idx, '../../.env')
+try {
+  const envContent = readFileSync(envPath, 'utf8')
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq === -1) continue
+    const key = trimmed.slice(0, eq)
+    const val = trimmed.slice(eq + 1)
+    if (!process.env[key]) process.env[key] = val  // don't override existing
+  }
+} catch { /* .env not found — that's fine */ }
 import { startTeam, stopTeam } from './orchestrator/compose.js'
 import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'

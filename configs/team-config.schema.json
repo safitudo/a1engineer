@@ -36,6 +36,27 @@
         }
       }
     },
+    "auth": {
+      "type": "object",
+      "description": "Authentication mode for Claude Code agents. Defaults to session auth.",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["session", "api-key"],
+          "default": "session"
+        },
+        "sessionPath": {
+          "type": "string",
+          "description": "Path to Claude session directory. ~ is expanded to home dir.",
+          "default": "~/.claude"
+        },
+        "apiKey": {
+          "type": "string",
+          "description": "Anthropic API key (only for api-key mode). Written to Docker secret at runtime, never stored."
+        }
+      }
+    },
     "agents": {
       "type": "array",
       "description": "Agent definitions for this team.",
@@ -65,6 +86,10 @@
             "description": "Agent runtime. Defaults to 'claude-code'.",
             "enum": ["claude-code", "codex", "custom"],
             "default": "claude-code"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Initial prompt for the agent. If omitted, falls back to .context/agents/{role}/prompt.md in the repo."
           }
         }
       }

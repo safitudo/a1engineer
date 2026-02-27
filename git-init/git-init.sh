@@ -68,4 +68,8 @@ BEGIN { RS="}"; FS="\"" }
   echo "[git-init] Worktree ready: $worktree_path"
 done
 
+# 3. Fix ownership — agent containers run as UID 1000 (agent user)
+chown -R 1000:1000 /git
+echo "[git-init] Ownership set to UID 1000."
+
 echo "[git-init] Done."

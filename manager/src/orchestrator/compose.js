@@ -1,9 +1,8 @@
 import { readFile, mkdir, writeFile, access } from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { join } from 'path'
+import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { dirname } from 'path'
 import { homedir } from 'os'
 import ejs from 'ejs'
 import { resolveGitHubToken } from '../github/app.js'
@@ -68,14 +67,19 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
 
   const secrets = await resolveSecrets(secretsDir)
   const template = await readFile(TEMPLATE_PATH, 'utf8')
+  // Merge ergo config; resolve relative configPath to absolute
+  const ergoMerged = {
+    image: DEFAULT_ERGO_IMAGE,
+    configPath: DEFAULT_ERGO_CONFIG,
+    port: 6667,
+    ...teamConfig.ergo,
+  }
+  if (ergoMerged.configPath && !ergoMerged.configPath.startsWith('/')) {
+    ergoMerged.configPath = resolve(ergoMerged.configPath)
+  }
   return ejs.render(template, {
     team: { id: teamConfig.id, name: teamConfig.name },
-    ergo: {
-      image: DEFAULT_ERGO_IMAGE,
-      configPath: DEFAULT_ERGO_CONFIG,
-      port: 6667,
-      ...teamConfig.ergo,
-    },
+    ergo: ergoMerged,
     repo: { ...teamConfig.repo, githubToken: githubToken || teamConfig.repo?.githubToken },
     agents: teamConfig.agents ?? [],
     auth: authContext,

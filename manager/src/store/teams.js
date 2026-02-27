@@ -22,6 +22,8 @@ export function createTeam(config) {
     id,
     name: config.name,
     repo: config.repo,
+    github: config.github ?? null,
+    ergo: config.ergo ?? null,
     agents: (config.agents ?? []).map((a, i) => ({
       id: a.id ?? `${config.name}-${a.role}${i > 0 ? `-${i}` : ''}`,
       role: a.role,
