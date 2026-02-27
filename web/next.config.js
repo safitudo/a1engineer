@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
-    const managerUrl = process.env.MANAGER_API_URL ?? 'http://localhost:3001'
+    const managerUrl = process.env.MANAGER_API_URL ?? 'http://localhost:8080'
     return [
       {
         source: '/api/:path*',

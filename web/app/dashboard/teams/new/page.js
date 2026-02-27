@@ -406,7 +406,7 @@ export default function NewTeamPage() {
         throw new Error(data.error ?? `Server error ${res.status}`)
       }
       const team = await res.json()
-      router.push(`/dashboard/teams/${team.id}`)
+      router.push('/dashboard')
     } catch (err) {
       setError(err.message)
       setLoading(false)
