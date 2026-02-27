@@ -7,6 +7,8 @@ export IS_DEMO=1                          # Skip onboarding / theme wizard
 export DISABLE_AUTOUPDATER=1              # No auto-update prompts
 export DISABLE_TELEMETRY=1                # No telemetry in containers
 export DISABLE_ERROR_REPORTING=1          # No error reporting in containers
+export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE="${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:-35}"
+export ENABLE_TOOL_SEARCH="${ENABLE_TOOL_SEARCH:-auto:5}"
 
 AGENT_HOME="/home/agent"
 
