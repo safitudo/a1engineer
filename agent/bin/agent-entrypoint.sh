@@ -49,7 +49,9 @@ if [ -f /run/secrets/anthropic_session ]; then
   export SESSION_AUTH=1
 fi
 
-# ── Git HTTPS auth (.netrc) ─────────────────────────────────────────────────
+# ── Git HTTPS auth (credential helper → Manager API for fresh tokens) ──────
+git config --global credential.helper '/usr/local/bin/git-credential-manager-token'
+# Also write .netrc as fallback if Manager is unreachable
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   printf 'machine github.com\nlogin x-access-token\npassword %s\n' "$GITHUB_TOKEN" > "$AGENT_HOME/.netrc"
   chmod 600 "$AGENT_HOME/.netrc"

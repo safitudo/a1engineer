@@ -2,6 +2,7 @@ import express from 'express'
 import { getTeam, updateTeam } from '../store/teams.js'
 import { broadcastHeartbeat } from './ws.js'
 import { requireAuth, requireTeamOwnership } from '../middleware/auth.js'
+import { resolveGitHubToken } from '../github/app.js'
 import teamsRouter from './teams.js'
 import agentsRouter from './agents.js'
 import channelsRouter from './channels.js'
@@ -10,6 +11,20 @@ import authRouter from './auth.js'
 export function createApp() {
   const app = express()
   app.use(express.json())
+
+  // GET /github-token/:teamId — fresh GitHub token for agent git operations (no auth)
+  app.get('/github-token/:teamId', async (req, res) => {
+    const team = getTeam(req.params.teamId)
+    if (!team) return res.status(404).json({ error: 'team not found' })
+    try {
+      const token = await resolveGitHubToken(team)
+      if (!token) return res.status(404).json({ error: 'no github config for team' })
+      return res.json({ token })
+    } catch (err) {
+      console.error('[github-token] refresh failed:', err.message)
+      return res.status(500).json({ error: 'token refresh failed' })
+    }
+  })
 
   // POST /heartbeat/:teamId/:agentId — keep-alive from agent containers (no auth)
   app.post('/heartbeat/:teamId/:agentId', (req, res) => {

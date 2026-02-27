@@ -13,10 +13,11 @@ RUN npm ci --production
 COPY bin/ bin/
 COPY lib/ lib/
 
-RUN chmod +x bin/agent-entrypoint.sh bin/msg.js bin/irc-poll.js bin/sidecar.sh \
+RUN chmod +x bin/agent-entrypoint.sh bin/msg.js bin/irc-poll.js bin/sidecar.sh bin/git-credential-manager-token \
     && ln -s /usr/local/lib/a1/bin/msg.js /usr/local/bin/msg \
     && ln -s /usr/local/lib/a1/bin/irc-poll.js /usr/local/bin/irc-poll \
     && ln -s /usr/local/lib/a1/bin/sidecar.sh /usr/local/bin/sidecar.sh \
-    && ln -s /usr/local/lib/a1/bin/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
+    && ln -s /usr/local/lib/a1/bin/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh \
+    && ln -s /usr/local/lib/a1/bin/git-credential-manager-token /usr/local/bin/git-credential-manager-token
 
 ENTRYPOINT ["agent-entrypoint.sh"]
