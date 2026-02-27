@@ -22,7 +22,7 @@
 
 const MANAGER_URL = process.env.MANAGER_URL || 'http://manager:8080'
 const TEAM_ID = process.env.TEAM_ID || ''
-const API_KEY = process.env.API_KEY || ''
+const API_KEY = process.env.MANAGER_TOKEN || process.env.API_KEY || ''
 
 const [,, command, ...args] = process.argv
 
