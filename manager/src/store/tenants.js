@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto'
+
 /** @type {Map<string, { id: string, apiKey: string, createdAt: string }>} */
 const tenants = new Map() // keyed by apiKey for fast lookup
 
@@ -8,7 +10,7 @@ export function findByApiKey(apiKey) {
 export function upsertTenant(apiKey) {
   if (tenants.has(apiKey)) return tenants.get(apiKey)
   const tenant = {
-    id: apiKey.slice(0, 12), // short id derived from key prefix
+    id: randomUUID(),
     apiKey,
     createdAt: new Date().toISOString(),
   }
