@@ -83,6 +83,7 @@ services:
       TEAM_ID: "<%- team.id %>"
       MANAGER_URL: "http://host.docker.internal:8080"
       HEARTBEAT_URL: "http://host.docker.internal:8080/heartbeat/<%- team.id %>/<%- agent.id %>"
+      MANAGER_TOKEN: "<%- team.internalToken %>"
       WORKSPACE: "/git"
       AGENT_PROMPT: <%- JSON.stringify(agent.prompt) %>
       WORKTREE_PATH: "/git/worktrees/<%- agent.id %>"

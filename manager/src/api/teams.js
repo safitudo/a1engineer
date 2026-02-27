@@ -6,6 +6,14 @@ import { routeMessage, clearTeamBuffers } from '../irc/router.js'
 
 const router = Router()
 
+function checkTeamScope(req, res) {
+  if (req.teamScope && req.params.id !== req.teamScope) {
+    res.status(403).json({ error: 'forbidden', code: 'FORBIDDEN' })
+    return false
+  }
+  return true
+}
+
 // POST /api/teams — create team + spin up compose stack
 // Accepts the full team config (same schema as JSON config files)
 router.post('/', async (req, res) => {
@@ -39,11 +47,16 @@ router.post('/', async (req, res) => {
 
 // GET /api/teams — list teams (filtered by tenant)
 router.get('/', (req, res) => {
+  if (req.teamScope) {
+    const team = teamStore.getTeam(req.teamScope)
+    return res.json(team ? [team] : [])
+  }
   res.json(teamStore.listTeams({ tenantId: req.tenantId }))
 })
 
 // GET /api/teams/:id — team detail
 router.get('/:id', (req, res) => {
+  if (!checkTeamScope(req, res)) return
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
@@ -58,6 +71,7 @@ router.get('/:id', (req, res) => {
 
 // PATCH /api/teams/:id — update team config (name, apiKeys only — agents/repo require re-create)
 router.patch('/:id', (req, res) => {
+  if (!checkTeamScope(req, res)) return
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
@@ -88,6 +102,7 @@ router.patch('/:id', (req, res) => {
 
 // GET /api/teams/:id/overview — high-level status of all agents (for Chuck orchestrator)
 router.get('/:id/overview', (req, res) => {
+  if (!checkTeamScope(req, res)) return
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
@@ -150,6 +165,7 @@ router.post('/rehydrate', async (_req, res) => {
 
 // DELETE /api/teams/:id — teardown compose stack + remove from store
 router.delete('/:id', async (req, res) => {
+  if (!checkTeamScope(req, res)) return
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
