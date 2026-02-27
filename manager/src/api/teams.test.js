@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import http from 'http'
 import { createApp } from './index.js'
-import { listTeams, deleteTeam } from '../store/teams.js'
+import { listTeams, deleteTeam, restoreTeam, getTeam } from '../store/teams.js'
+import { readMessages } from '../irc/router.js'
 
 // Mock compose to avoid Docker calls
 vi.mock('../orchestrator/compose.js', () => ({
@@ -350,6 +351,38 @@ describe('GET /api/teams/:id/channels', () => {
   })
 })
 
+// ── GET /api/teams/:id/channels/:name/messages ────────────────────────────────
+
+describe('GET /api/teams/:id/channels/:name/messages', () => {
+  it('returns 200 with empty array when no messages buffered', async () => {
+    readMessages.mockReturnValue([])
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const res = await get(port, `/api/teams/${teamId}/channels/main/messages`)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual([])
+  })
+
+  it('returns buffered messages from IRC router', async () => {
+    const msgs = [
+      { nick: 'dev-1', text: 'hello', channel: '#main', time: '2026-01-01T00:00:00Z' },
+      { nick: 'dev-2', text: 'world', channel: '#main', time: '2026-01-01T00:00:01Z' },
+    ]
+    readMessages.mockReturnValue(msgs)
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const res = await get(port, `/api/teams/${teamId}/channels/main/messages`)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual(msgs)
+  })
+
+  it('returns 404 for unknown team', async () => {
+    const res = await get(port, '/api/teams/nope/channels/main/messages')
+    expect(res.status).toBe(404)
+    expect(res.body.code).toBe('NOT_FOUND')
+  })
+})
+
 // ── POST /api/teams/:id/channels/:name/messages (stub) ───────────────────────
 
 describe('POST /api/teams/:id/channels/:name/messages', () => {
@@ -432,6 +465,58 @@ describe('tenant auth', () => {
       req.end()
     })
     expect(res.status).toBe(404)
+  })
+})
+
+// ── Rehydrated team access (null tenantId) ───────────────────────────────────
+
+describe('rehydrated team access', () => {
+  it('allows access to rehydrated team with null tenantId', async () => {
+    // Simulate a rehydrated team (restored from disk with tenantId cleared)
+    restoreTeam({
+      id: 'rehydrated-team-1',
+      name: 'rehydrated',
+      repo: { url: 'https://github.com/acme/app' },
+      agents: [{ id: 'agent-1', role: 'dev', model: 'claude-sonnet-4-6', runtime: 'claude-code', prompt: '', env: {}, last_heartbeat: null }],
+      status: 'running',
+      tenantId: null,
+    })
+
+    const res = await get(port, '/api/teams/rehydrated-team-1')
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe('rehydrated-team-1')
+  })
+
+  it('auto-adopts rehydrated team on first access', async () => {
+    restoreTeam({
+      id: 'rehydrated-team-2',
+      name: 'adopted',
+      repo: { url: 'https://github.com/acme/app' },
+      agents: [],
+      status: 'running',
+      tenantId: null,
+    })
+
+    // First access with auth key — should adopt the team
+    await get(port, '/api/teams/rehydrated-team-2')
+    const team = getTeam('rehydrated-team-2')
+    expect(team.tenantId).toBeTruthy()
+  })
+
+  it('overview works for rehydrated team', async () => {
+    restoreTeam({
+      id: 'rehydrated-team-3',
+      name: 'overview-test',
+      repo: { url: 'https://github.com/acme/app' },
+      agents: [{ id: 'agent-1', role: 'dev', model: 'claude-sonnet-4-6', runtime: 'claude-code', prompt: '', env: {}, last_heartbeat: null }],
+      status: 'running',
+      tenantId: null,
+    })
+
+    const res = await get(port, '/api/teams/rehydrated-team-3/overview')
+    expect(res.status).toBe(200)
+    expect(res.body.teamId).toBe('rehydrated-team-3')
+    expect(res.body.agentCount).toBe(1)
   })
 })
 

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# pty-send — Reliably submit text to Claude Code's Ink TUI via tmux.
+#
+# tmux send-keys doesn't work with Ink because keystrokes stack up
+# without submitting. This script uses paste-buffer + raw CR instead.
+#
+# Usage:
+#   pty-send "your prompt text here"
+#   pty-send -s agent "your prompt text here"   # specify tmux session
+#
+# Flags:
+#   -s SESSION   tmux session name (default: agent)
+#   -c           clear input line first (Ctrl+U) before sending
+
+set -euo pipefail
+
+SESSION="agent"
+CLEAR=true
+
+while getopts "s:c" opt; do
+  case "$opt" in
+    s) SESSION="$OPTARG" ;;
+    c) CLEAR=true ;;
+    *) ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+MSG="${1:-}"
+if [ -z "$MSG" ]; then
+  echo "Usage: pty-send [-s session] \"message\"" >&2
+  exit 1
+fi
+
+# Clear any stacked input
+if [ "$CLEAR" = true ]; then
+  tmux send-keys -t "$SESSION" C-u
+  sleep 0.1
+fi
+
+# Paste text in bulk (not keystroke-by-keystroke)
+tmux set-buffer -b _pty_send "$MSG"
+tmux paste-buffer -b _pty_send -t "$SESSION"
+sleep 0.1
+
+# Raw carriage return (0x0d) to submit
+tmux send-keys -t "$SESSION" -H 0d

@@ -1,7 +1,7 @@
 import { WebSocketServer } from 'ws'
 import { getTeam } from '../store/teams.js'
 import { registerBroadcaster } from '../irc/router.js'
-import { upsertTenant } from '../store/tenants.js'
+import { findByApiKey } from '../store/tenants.js'
 
 // WebSocket.OPEN numeric value (avoids importing the class just for the constant)
 const WS_OPEN = 1
@@ -153,7 +153,7 @@ export function attachWebSocketServer(server) {
       return
     }
 
-    const tenant = upsertTenant(token)
+    const tenant = findByApiKey(token)
     if (!tenant) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
       socket.destroy()

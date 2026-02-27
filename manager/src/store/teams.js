@@ -66,3 +66,10 @@ export function updateTeam(id, updates) {
 export function deleteTeam(id) {
   store.delete(id)
 }
+
+// Re-insert a team object directly (used by rehydration on startup).
+// Skips createTeam logic — the team already has an id and normalized shape.
+export function restoreTeam(team) {
+  store.set(team.id, team)
+  return team
+}

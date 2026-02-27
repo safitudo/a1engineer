@@ -22,14 +22,17 @@
 
 const MANAGER_URL = process.env.MANAGER_URL || 'http://manager:8080'
 const TEAM_ID = process.env.TEAM_ID || ''
+const API_KEY = process.env.API_KEY || ''
 
 const [,, command, ...args] = process.argv
 
 async function api(method, path, body) {
   const url = `${MANAGER_URL}${path}`
+  const headers = { 'Content-Type': 'application/json' }
+  if (API_KEY) headers['Authorization'] = `Bearer ${API_KEY}`
   const opts = {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
   }
   if (body) opts.body = JSON.stringify(body)
 
@@ -126,6 +129,21 @@ async function main() {
       break
     }
 
+    case 'exec': {
+      requireTeamId()
+      const agentId = args[0]
+      requireArg('agentId', agentId)
+      const command = args.slice(1)
+      if (command.length === 0) {
+        console.error('Usage: chuck exec <agentId> <command...>')
+        process.exit(1)
+      }
+      const { data } = await api('POST', `/api/teams/${TEAM_ID}/agents/${agentId}/exec`, { command })
+      if (data.output) console.log(data.output)
+      if (!data.ok) process.exit(1)
+      break
+    }
+
     default:
       console.log(`chuck — orchestrator CLI
 
@@ -137,6 +155,7 @@ Usage:
   chuck nudge <agentId> [message]         Nudge agent
   chuck interrupt <agentId>               Ctrl+C to stop agent
   chuck directive <agentId> <message>     Interrupt + new instruction
+  chuck exec <agentId> <command...>       Run command in agent container
 
 Env: MANAGER_URL=${MANAGER_URL}  TEAM_ID=${TEAM_ID || '(not set)'}`)
       break

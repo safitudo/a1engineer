@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import * as teamStore from '../store/teams.js'
-import { startTeam, stopTeam } from '../orchestrator/compose.js'
+import { startTeam, stopTeam, rehydrateTeams } from '../orchestrator/compose.js'
 import { createGateway, destroyGateway } from '../irc/gateway.js'
 import { routeMessage, clearTeamBuffers } from '../irc/router.js'
 
@@ -46,8 +46,12 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  // Auto-adopt rehydrated teams (tenantId was cleared on restore)
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
   }
   res.json(team)
 })
@@ -56,8 +60,11 @@ router.get('/:id', (req, res) => {
 router.patch('/:id', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
   }
 
   const { name, auth } = req.body ?? {}
@@ -83,8 +90,11 @@ router.patch('/:id', (req, res) => {
 router.get('/:id/overview', (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
   }
 
   const now = Date.now()
@@ -119,11 +129,30 @@ router.get('/:id/overview', (req, res) => {
   })
 })
 
+// POST /api/teams/rehydrate — rebuild in-memory store from TEAMS_DIR
+// Used after Manager restart to recover team state without a database.
+router.post('/rehydrate', async (_req, res) => {
+  try {
+    const restored = await rehydrateTeams(teamStore.restoreTeam)
+    // Re-create IRC gateways for restored teams
+    for (const id of restored) {
+      const team = teamStore.getTeam(id)
+      if (team) {
+        try { createGateway(team, { onMessage: routeMessage }) } catch { /* may already exist */ }
+      }
+    }
+    return res.json({ ok: true, restored })
+  } catch (err) {
+    console.error('[api/teams] rehydrate failed:', err)
+    return res.status(500).json({ error: 'rehydrate failed', code: 'REHYDRATE_ERROR' })
+  }
+})
+
 // DELETE /api/teams/:id — teardown compose stack + remove from store
 router.delete('/:id', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId !== req.tenantId) {
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
     return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
   }
 
