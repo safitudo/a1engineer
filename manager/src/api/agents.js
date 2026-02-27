@@ -94,6 +94,20 @@ async function tmuxSendKeys(teamId, agentId, keys) {
   await dockerExec(teamId, agentId, ['tmux', 'send-keys', '-t', 'agent', ...keys])
 }
 
+// ── Helper: send command to sidecar FIFO ─────────────────────────────────────
+// The sidecar's nudge_listener routes commands to the right target:
+//   - print-loop agents (/tmp/agent-mode-print): appends to /tmp/agent-inbox.txt
+//   - interactive agents: forwards via tmux send-keys
+// This replaces direct tmux send-keys which only worked for interactive agents.
+async function sendToFifo(teamId, agentId, command) {
+  const serviceName = `agent-${agentId}`
+  const cf = composeFile(teamId)
+  // Run as root — sidecar FIFO is owned by root, chmod 666
+  const args = ['compose', '-f', cf, 'exec', '-T', serviceName, 'sh', '-c',
+    `echo '${command.replace(/'/g, "'\\''")}' > /tmp/nudge.fifo`]
+  await execFileAsync('docker', args, { timeout: 10000 })
+}
+
 // GET /api/teams/:id/agents/:agentId/screen — capture agent's tmux screen
 router.get('/:agentId/screen', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
@@ -150,7 +164,7 @@ router.get('/:agentId/activity', async (req, res) => {
   }
 })
 
-// POST /api/teams/:id/agents/:agentId/nudge — send a message to agent via tmux
+// POST /api/teams/:id/agents/:agentId/nudge — send a message to agent via sidecar FIFO
 router.post('/:agentId/nudge', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
@@ -164,7 +178,7 @@ router.post('/:agentId/nudge', async (req, res) => {
     : 'continue. check IRC with msg read, then resume your current task.'
 
   try {
-    await tmuxSendKeys(team.id, agent.id, [nudgeMsg, 'Enter'])
+    await sendToFifo(team.id, agent.id, `nudge ${nudgeMsg}`)
     return res.json({ ok: true, message: nudgeMsg })
   } catch (err) {
     console.error('[api/agents] nudge failed:', err)
@@ -172,7 +186,7 @@ router.post('/:agentId/nudge', async (req, res) => {
   }
 })
 
-// POST /api/teams/:id/agents/:agentId/interrupt — send Ctrl+C to stop current execution
+// POST /api/teams/:id/agents/:agentId/interrupt — send Ctrl+C via sidecar FIFO
 router.post('/:agentId/interrupt', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
@@ -181,7 +195,7 @@ router.post('/:agentId/interrupt', async (req, res) => {
   if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
 
   try {
-    await tmuxSendKeys(team.id, agent.id, ['C-c'])
+    await sendToFifo(team.id, agent.id, 'interrupt')
     return res.json({ ok: true, action: 'interrupt' })
   } catch (err) {
     console.error('[api/agents] interrupt failed:', err)
@@ -189,7 +203,7 @@ router.post('/:agentId/interrupt', async (req, res) => {
   }
 })
 
-// POST /api/teams/:id/agents/:agentId/directive — interrupt + send new instruction
+// POST /api/teams/:id/agents/:agentId/directive — interrupt + send new instruction via sidecar FIFO
 router.post('/:agentId/directive', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
@@ -203,10 +217,8 @@ router.post('/:agentId/directive', async (req, res) => {
   }
 
   try {
-    // Ctrl+C to stop current work, brief pause, then new instruction
-    await tmuxSendKeys(team.id, agent.id, ['C-c'])
-    await new Promise(r => setTimeout(r, 500))
-    await tmuxSendKeys(team.id, agent.id, [message, 'Enter'])
+    // Sidecar handles the Ctrl+C + pause + message sequence internally
+    await sendToFifo(team.id, agent.id, `directive ${message}`)
     return res.json({ ok: true, action: 'directive', message })
   } catch (err) {
     console.error('[api/agents] directive failed:', err)
