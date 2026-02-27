@@ -17,6 +17,9 @@ function checkTeamScope(req, res) {
 // POST /api/teams — create team + spin up compose stack
 // Accepts the full team config (same schema as JSON config files)
 router.post('/', async (req, res) => {
+  if (req.teamScope) {
+    return res.status(403).json({ error: 'forbidden', code: 'FORBIDDEN' })
+  }
   const config = req.body ?? {}
   const { name, repo, agents } = config
   if (!name || typeof name !== 'string') {
@@ -146,7 +149,10 @@ router.get('/:id/overview', (req, res) => {
 
 // POST /api/teams/rehydrate — rebuild in-memory store from TEAMS_DIR
 // Used after Manager restart to recover team state without a database.
-router.post('/rehydrate', async (_req, res) => {
+router.post('/rehydrate', async (req, res) => {
+  if (req.teamScope) {
+    return res.status(403).json({ error: 'forbidden', code: 'FORBIDDEN' })
+  }
   try {
     const restored = await rehydrateTeams(teamStore.restoreTeam)
     // Re-create IRC gateways for restored teams

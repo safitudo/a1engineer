@@ -71,6 +71,10 @@ export function deleteTeam(id) {
 // Re-insert a team object directly (used by rehydration on startup).
 // Skips createTeam logic — the team already has an id and normalized shape.
 export function restoreTeam(team) {
+  // Backfill internalToken for teams created before MANAGER_TOKEN feature
+  if (!team.internalToken) {
+    team = { ...team, internalToken: randomBytes(32).toString('hex') }
+  }
   store.set(team.id, team)
   return team
 }
