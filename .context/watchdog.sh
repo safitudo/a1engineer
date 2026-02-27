@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
-ROLES="dev|qa|arch|lead|critic"
+ROLES="dev|qa|arch|lead|critic|chuck"
 INTERVAL=15
 STATUS_INTERVAL=30
 LAST_STATUS=0

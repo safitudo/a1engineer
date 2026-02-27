@@ -68,6 +68,43 @@ router.patch('/:id', (req, res) => {
   res.json(updated)
 })
 
+// GET /api/teams/:id/overview — high-level status of all agents (for Chuck orchestrator)
+router.get('/:id/overview', (req, res) => {
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+
+  const now = Date.now()
+  const agents = (team.agents ?? []).map(a => {
+    const lastHb = a.last_heartbeat ? new Date(a.last_heartbeat).getTime() : null
+    const idleSecs = lastHb ? Math.round((now - lastHb) / 1000) : null
+    let status = 'unknown'
+    if (idleSecs === null) status = 'no-heartbeat'
+    else if (idleSecs < 60) status = 'active'
+    else if (idleSecs < 300) status = 'idle'
+    else status = 'stale'
+
+    return {
+      id: a.id,
+      role: a.role,
+      model: a.model,
+      runtime: a.runtime,
+      status,
+      idleSeconds: idleSecs,
+      lastHeartbeat: a.last_heartbeat ?? null,
+    }
+  })
+
+  return res.json({
+    teamId: team.id,
+    name: team.name,
+    status: team.status,
+    agentCount: agents.length,
+    agents,
+    autoNudge: team.autoNudge ?? { enabled: true },
+    checkedAt: new Date().toISOString(),
+  })
+})
+
 // DELETE /api/teams/:id — teardown compose stack + remove from store
 router.delete('/:id', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)

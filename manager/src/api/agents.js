@@ -79,8 +79,117 @@ router.delete('/:agentId', async (req, res) => {
   res.status(204).end()
 })
 
-// POST /api/teams/:id/agents/:agentId/nudge — send a message to agent via docker exec
+// ── Helper: docker exec into agent container ────────────────────────────────
+async function dockerExec(teamId, agentId, cmd, opts = {}) {
+  const serviceName = `agent-${agentId}`
+  const cf = composeFile(teamId)
+  const args = ['compose', '-f', cf, 'exec', '-T', serviceName, ...cmd]
+  const { stdout } = await execFileAsync('docker', args, { timeout: opts.timeout ?? 10000 })
+  return stdout
+}
+
+// ── Helper: tmux send-keys into agent session ────────────────────────────────
+async function tmuxSendKeys(teamId, agentId, keys) {
+  await dockerExec(teamId, agentId, ['tmux', 'send-keys', '-t', 'agent', ...keys])
+}
+
+// GET /api/teams/:id/agents/:agentId/screen — capture agent's tmux screen
+router.get('/:agentId/screen', async (req, res) => {
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+
+  const agent = team.agents.find((a) => a.id === req.params.agentId)
+  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
+
+  try {
+    const output = await dockerExec(team.id, agent.id, [
+      'tmux', 'capture-pane', '-t', 'agent', '-p',
+    ])
+    const lines = output.split('\n')
+    return res.json({
+      agentId: agent.id,
+      role: agent.role,
+      lines,
+      lineCount: lines.length,
+      capturedAt: new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error('[api/agents] screen capture failed:', err)
+    return res.status(500).json({ error: 'screen capture failed', code: 'EXEC_ERROR' })
+  }
+})
+
+// GET /api/teams/:id/agents/:agentId/activity — git activity for agent
+router.get('/:agentId/activity', async (req, res) => {
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+
+  const agent = team.agents.find((a) => a.id === req.params.agentId)
+  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
+
+  try {
+    const [diffStat, log, branch, status] = await Promise.all([
+      dockerExec(team.id, agent.id, ['git', 'diff', '--stat']).catch(() => ''),
+      dockerExec(team.id, agent.id, ['git', 'log', '--oneline', '-5']).catch(() => ''),
+      dockerExec(team.id, agent.id, ['git', 'branch', '--show-current']).catch(() => ''),
+      dockerExec(team.id, agent.id, ['git', 'status', '--short']).catch(() => ''),
+    ])
+    return res.json({
+      agentId: agent.id,
+      role: agent.role,
+      branch: branch.trim(),
+      diffStat: diffStat.trim(),
+      recentCommits: log.trim().split('\n').filter(Boolean),
+      status: status.trim(),
+      checkedAt: new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error('[api/agents] activity check failed:', err)
+    return res.status(500).json({ error: 'activity check failed', code: 'EXEC_ERROR' })
+  }
+})
+
+// POST /api/teams/:id/agents/:agentId/nudge — send a message to agent via tmux
 router.post('/:agentId/nudge', async (req, res) => {
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+
+  const agent = team.agents.find((a) => a.id === req.params.agentId)
+  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
+
+  const { message } = req.body ?? {}
+  const nudgeMsg = (typeof message === 'string' && message)
+    ? message
+    : 'continue. check IRC with msg read, then resume your current task.'
+
+  try {
+    await tmuxSendKeys(team.id, agent.id, [nudgeMsg, 'Enter'])
+    return res.json({ ok: true, message: nudgeMsg })
+  } catch (err) {
+    console.error('[api/agents] nudge failed:', err)
+    return res.status(500).json({ error: 'nudge failed', code: 'EXEC_ERROR' })
+  }
+})
+
+// POST /api/teams/:id/agents/:agentId/interrupt — send Ctrl+C to stop current execution
+router.post('/:agentId/interrupt', async (req, res) => {
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+
+  const agent = team.agents.find((a) => a.id === req.params.agentId)
+  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
+
+  try {
+    await tmuxSendKeys(team.id, agent.id, ['C-c'])
+    return res.json({ ok: true, action: 'interrupt' })
+  } catch (err) {
+    console.error('[api/agents] interrupt failed:', err)
+    return res.status(500).json({ error: 'interrupt failed', code: 'EXEC_ERROR' })
+  }
+})
+
+// POST /api/teams/:id/agents/:agentId/directive — interrupt + send new instruction
+router.post('/:agentId/directive', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
 
@@ -92,28 +201,15 @@ router.post('/:agentId/nudge', async (req, res) => {
     return res.status(400).json({ error: 'message is required', code: 'MISSING_MESSAGE' })
   }
 
-  const serviceName = `agent-${agent.id}`
-  const cf = composeFile(team.id)
   try {
-    await new Promise((resolve, reject) => {
-      const proc = spawn('docker', [
-        'compose', '-f', cf, 'exec', '-T', serviceName,
-        'sh', '-c', 'cat >> /tmp/nudge.txt',
-      ], { stdio: ['pipe', 'pipe', 'pipe'] })
-      let stderr = ''
-      proc.stderr.on('data', (d) => { stderr += d })
-      proc.on('error', reject)
-      proc.on('close', (code) => {
-        if (code === 0) resolve()
-        else reject(new Error(`docker compose exec exited ${code}: ${stderr}`))
-      })
-      proc.stdin.write(message + '\n')
-      proc.stdin.end()
-    })
-    return res.json({ ok: true })
+    // Ctrl+C to stop current work, brief pause, then new instruction
+    await tmuxSendKeys(team.id, agent.id, ['C-c'])
+    await new Promise(r => setTimeout(r, 500))
+    await tmuxSendKeys(team.id, agent.id, [message, 'Enter'])
+    return res.json({ ok: true, action: 'directive', message })
   } catch (err) {
-    console.error('[api/agents] nudge failed:', err)
-    return res.status(500).json({ error: 'nudge failed', code: 'EXEC_ERROR' })
+    console.error('[api/agents] directive failed:', err)
+    return res.status(500).json({ error: 'directive failed', code: 'EXEC_ERROR' })
   }
 })
 

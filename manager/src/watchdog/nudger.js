@@ -1,0 +1,61 @@
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { join } from 'path'
+import * as teamStore from '../store/teams.js'
+
+const execFileAsync = promisify(execFile)
+const TEAMS_DIR = '/tmp/a1-teams'
+
+const DEFAULT_IDLE_THRESHOLD = 300 // 5 min
+const DEFAULT_NUDGE_MSG = 'continue. check IRC with msg read, then resume your current task.'
+const CHECK_INTERVAL = 15_000 // 15 seconds
+
+/**
+ * Auto-nudge loop. Checks heartbeat staleness for all teams with autoNudge enabled.
+ * Sends tmux keys to idle agents via docker exec.
+ *
+ * Does NOT run for teams where autoNudge.enabled === false (Chuck handles those).
+ */
+export function startNudger() {
+  console.log('[nudger] started')
+
+  const interval = setInterval(async () => {
+    const teams = teamStore.listTeams()
+
+    for (const team of teams) {
+      if (team.status !== 'running') continue
+
+      const nudgeConfig = team.autoNudge ?? { enabled: true }
+      if (nudgeConfig.enabled === false) continue
+
+      const threshold = (nudgeConfig.idleThresholdSeconds ?? DEFAULT_IDLE_THRESHOLD) * 1000
+      const nudgeMsg = nudgeConfig.nudgeMessage ?? DEFAULT_NUDGE_MSG
+      const now = Date.now()
+
+      for (const agent of team.agents ?? []) {
+        // Skip chuck — it's the orchestrator, not a worker
+        if (agent.role === 'chuck') continue
+
+        if (!agent.last_heartbeat) continue
+        const lastHb = new Date(agent.last_heartbeat).getTime()
+        const idleMs = now - lastHb
+
+        if (idleMs >= threshold) {
+          try {
+            const cf = join(TEAMS_DIR, team.id, 'docker-compose.yml')
+            const serviceName = `agent-${agent.id}`
+            await execFileAsync('docker', [
+              'compose', '-f', cf, 'exec', '-T', serviceName,
+              'tmux', 'send-keys', '-t', 'agent', nudgeMsg, 'Enter',
+            ], { timeout: 10000 })
+            console.log(`[nudger] nudged ${agent.id} (idle ${Math.round(idleMs / 1000)}s)`)
+          } catch (err) {
+            console.warn(`[nudger] failed to nudge ${agent.id}: ${err.message}`)
+          }
+        }
+      }
+    }
+  }, CHECK_INTERVAL)
+
+  return { stop: () => clearInterval(interval) }
+}

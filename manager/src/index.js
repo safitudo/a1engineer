@@ -4,6 +4,7 @@ import * as teamStore from './store/teams.js'
 import { startTeam, stopTeam } from './orchestrator/compose.js'
 import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'
+import { startNudger } from './watchdog/nudger.js'
 
 const TEAMS_DIR = '/tmp/a1-teams'
 
@@ -91,6 +92,7 @@ async function main() {
         console.log(`[manager] REST API + WebSocket listening on :${port}`)
       })
       attachWebSocketServer(server)
+      startNudger()
       break
     }
 

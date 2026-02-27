@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKTREE_BASE="$(dirname "$REPO_ROOT")/$(basename "$REPO_ROOT")-trees"
-ROLES="dev|qa|arch|lead|critic"
+ROLES="dev|qa|arch|lead|critic|chuck"
 
 # --- Find and kill agent windows/sessions ---
 KILLED=0

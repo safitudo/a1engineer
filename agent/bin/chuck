@@ -1,0 +1,149 @@
+#!/usr/bin/env node
+
+/**
+ * chuck — CLI for the Chuck orchestrator agent.
+ *
+ * Wraps the Manager REST API so Chuck can observe and control other agents
+ * from inside a container using simple shell commands.
+ *
+ * Usage:
+ *   chuck overview                              — team status + all agents
+ *   chuck screen <agentId>                      — capture agent's tmux screen
+ *   chuck activity <agentId>                    — git activity for agent
+ *   chuck nudge <agentId> [message]             — send message to agent
+ *   chuck interrupt <agentId>                   — Ctrl+C to stop agent
+ *   chuck directive <agentId> <message>         — interrupt + new instruction
+ *   chuck agents                                — list all agents
+ *
+ * Env vars:
+ *   MANAGER_URL  — Manager API base (default: http://manager:8080)
+ *   TEAM_ID      — Team ID (auto-set by compose template)
+ */
+
+const MANAGER_URL = process.env.MANAGER_URL || 'http://manager:8080'
+const TEAM_ID = process.env.TEAM_ID || ''
+
+const [,, command, ...args] = process.argv
+
+async function api(method, path, body) {
+  const url = `${MANAGER_URL}${path}`
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  }
+  if (body) opts.body = JSON.stringify(body)
+
+  const res = await fetch(url, opts)
+  const text = await res.text()
+  try {
+    return { status: res.status, data: JSON.parse(text) }
+  } catch {
+    return { status: res.status, data: text }
+  }
+}
+
+function requireTeamId() {
+  if (!TEAM_ID) {
+    console.error('TEAM_ID not set. Are you running inside a team container?')
+    process.exit(1)
+  }
+}
+
+function requireArg(name, value) {
+  if (!value) {
+    console.error(`Missing required argument: ${name}`)
+    process.exit(1)
+  }
+}
+
+async function main() {
+  switch (command) {
+    case 'overview': {
+      requireTeamId()
+      const { data } = await api('GET', `/api/teams/${TEAM_ID}/overview`)
+      console.log(JSON.stringify(data, null, 2))
+      break
+    }
+
+    case 'agents': {
+      requireTeamId()
+      const { data } = await api('GET', `/api/teams/${TEAM_ID}/agents`)
+      console.log(JSON.stringify(data, null, 2))
+      break
+    }
+
+    case 'screen': {
+      requireTeamId()
+      const agentId = args[0]
+      requireArg('agentId', agentId)
+      const { data } = await api('GET', `/api/teams/${TEAM_ID}/agents/${agentId}/screen`)
+      if (data.lines) {
+        // Print screen content directly for readability
+        console.log(`── Screen: ${agentId} (${data.role}) @ ${data.capturedAt} ──`)
+        console.log(data.lines.join('\n'))
+      } else {
+        console.log(JSON.stringify(data, null, 2))
+      }
+      break
+    }
+
+    case 'activity': {
+      requireTeamId()
+      const agentId = args[0]
+      requireArg('agentId', agentId)
+      const { data } = await api('GET', `/api/teams/${TEAM_ID}/agents/${agentId}/activity`)
+      console.log(JSON.stringify(data, null, 2))
+      break
+    }
+
+    case 'nudge': {
+      requireTeamId()
+      const agentId = args[0]
+      requireArg('agentId', agentId)
+      const message = args.slice(1).join(' ') || undefined
+      const { data } = await api('POST', `/api/teams/${TEAM_ID}/agents/${agentId}/nudge`, { message })
+      console.log(JSON.stringify(data, null, 2))
+      break
+    }
+
+    case 'interrupt': {
+      requireTeamId()
+      const agentId = args[0]
+      requireArg('agentId', agentId)
+      const { data } = await api('POST', `/api/teams/${TEAM_ID}/agents/${agentId}/interrupt`)
+      console.log(JSON.stringify(data, null, 2))
+      break
+    }
+
+    case 'directive': {
+      requireTeamId()
+      const agentId = args[0]
+      requireArg('agentId', agentId)
+      const message = args.slice(1).join(' ')
+      requireArg('message', message)
+      const { data } = await api('POST', `/api/teams/${TEAM_ID}/agents/${agentId}/directive`, { message })
+      console.log(JSON.stringify(data, null, 2))
+      break
+    }
+
+    default:
+      console.log(`chuck — orchestrator CLI
+
+Usage:
+  chuck overview                          Team status + all agents
+  chuck agents                            List agents
+  chuck screen <agentId>                  Capture agent screen
+  chuck activity <agentId>                Git activity for agent
+  chuck nudge <agentId> [message]         Nudge agent
+  chuck interrupt <agentId>               Ctrl+C to stop agent
+  chuck directive <agentId> <message>     Interrupt + new instruction
+
+Env: MANAGER_URL=${MANAGER_URL}  TEAM_ID=${TEAM_ID || '(not set)'}`)
+      break
+  }
+}
+
+main().catch(err => {
+  console.error(err.message)
+  process.exit(1)
+})

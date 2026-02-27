@@ -72,6 +72,8 @@ services:
       CITY: "<%- team.name %>"
       AGENT_RUNTIME: "<%- agent.runtime %>"
       MODEL: "<%- agent.model %>"
+      TEAM_ID: "<%- team.id %>"
+      MANAGER_URL: "http://manager:8080"
       HEARTBEAT_URL: "http://manager:8080/heartbeat/<%- team.id %>/<%- agent.id %>"
       WORKSPACE: "/git"
       AGENT_PROMPT: <%- JSON.stringify(agent.prompt) %>

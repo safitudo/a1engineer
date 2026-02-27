@@ -7,7 +7,7 @@ WORKTREE_BASE="$(dirname "$REPO_ROOT")/$(basename "$REPO_ROOT")-trees"
 
 # --- Validate role argument ---
 ROLE="${1:-}"
-VALID_ROLES=("dev" "qa" "arch" "lead" "critic")
+VALID_ROLES=("dev" "qa" "arch" "lead" "critic" "chuck")
 
 if [[ -z "$ROLE" ]] || ! printf '%s\n' "${VALID_ROLES[@]}" | grep -qx "$ROLE"; then
   echo "Usage: $0 <role>"

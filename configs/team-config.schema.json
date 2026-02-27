@@ -48,7 +48,7 @@
           "role": {
             "type": "string",
             "description": "Agent role. Maps to IRC_ROLE env var. Nick derived at runtime as {name}-{role} (with suffix for duplicates).",
-            "enum": ["arch", "lead", "dev", "qa", "critic"]
+            "enum": ["arch", "lead", "dev", "qa", "critic", "chuck"]
           },
           "model": {
             "type": "string",
@@ -85,6 +85,29 @@
         "privateKeyPath": {
           "type": "string",
           "description": "Path to the GitHub App private key PEM file. Can also be set via GITHUB_APP_PRIVATE_KEY_PATH env var."
+        }
+      }
+    },
+    "autoNudge": {
+      "type": "object",
+      "description": "Automatic nudge settings. When enabled, the Manager nudges idle agents based on heartbeat staleness. Disable if using a chuck orchestrator agent for intelligent nudging instead.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable automatic nudging of idle agents. Defaults to true. Set to false when a chuck orchestrator agent handles nudging.",
+          "default": true
+        },
+        "idleThresholdSeconds": {
+          "type": "integer",
+          "description": "Seconds of no heartbeat before an agent is considered idle and nudged. Defaults to 300 (5 min).",
+          "default": 300,
+          "minimum": 30
+        },
+        "nudgeMessage": {
+          "type": "string",
+          "description": "Message sent to idle agents via tmux send-keys.",
+          "default": "continue. check IRC with msg read, then resume your current task."
         }
       }
     },
