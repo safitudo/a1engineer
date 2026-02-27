@@ -60,20 +60,19 @@ irc_poll_loop() {
     return
   fi
 
-  log "IRC polling started (every ${IRC_POLL_INTERVAL}s)"
+  # Only poll IRC for --print loop agents. Interactive agents get messages
+  # via the PostToolUse irc-poll hook — sidecar polling would race the cursor.
+  if [ ! -f /tmp/agent-mode-print ]; then
+    log "interactive mode — IRC polling handled by PostToolUse hook, sidecar skipping"
+    return
+  fi
+
+  log "IRC polling started (every ${IRC_POLL_INTERVAL}s) [print-loop mode]"
   while true; do
     sleep "$IRC_POLL_INTERVAL"
-    # msg read returns new messages; empty = nothing new
     NEW_MSGS=$(su -s /bin/bash "$TMUX_USER" -c "cd /git/worktrees/${IRC_NICK:-agent} 2>/dev/null; msg read 2>/dev/null" || true)
-    # Filter out "no new messages" — only forward actual content
     if [ -n "$NEW_MSGS" ] && ! echo "$NEW_MSGS" | grep -qi "no new messages"; then
-      if [ -f /tmp/agent-mode-print ]; then
-        # Print-loop mode: append to inbox file for the loop to pick up
-        echo "[IRC] $NEW_MSGS" >> /tmp/agent-inbox.txt
-      else
-        # Interactive mode: type it into the tmux session
-        su -s /bin/bash "$TMUX_USER" -c "tmux send-keys -t $TMUX_SESSION \"$NEW_MSGS\" Enter" 2>/dev/null || true
-      fi
+      echo "[IRC] $NEW_MSGS" >> /tmp/agent-inbox.txt
     fi
   done
 }

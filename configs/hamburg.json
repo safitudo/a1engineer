@@ -15,7 +15,7 @@
   },
   "agents": [
     { "role": "arch",   "model": "opus",   "effort": "high", "auth": "session" },
-    { "role": "lead",   "model": "opus",   "effort": "high", "auth": "session" },
+    { "role": "lead",   "model": "opus",   "effort": "low", "auth": "session" },
     { "role": "chuck",  "model": "sonnet", "effort": "high", "auth": "session" },
     { "role": "dev",    "model": "sonnet", "effort": "high", "auth": "session" },
     { "role": "dev",    "model": "sonnet", "effort": "high", "auth": "session" },

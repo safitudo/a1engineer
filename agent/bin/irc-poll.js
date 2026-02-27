@@ -61,7 +61,7 @@ async function poll() {
   })
 
   const now = new Date().toISOString()
-  let hasOutput = false
+  const lines = []
 
   for (const [ch, msgs] of results) {
     const since = history[ch]
@@ -70,15 +70,14 @@ async function poll() {
       : msgs
 
     if (newMsgs.length > 0) {
-      if (!hasOutput) hasOutput = true
-      console.log(`── ${ch} (${newMsgs.length} new) ──`)
+      lines.push(`── ${ch} (${newMsgs.length} new) ──`)
       for (const m of newMsgs) {
         const ts = new Date(m.time).toLocaleTimeString('en-GB', {
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',
         })
-        console.log(`  [${ts}] <${m.nick}> ${m.text}`)
+        lines.push(`  [${ts}] <${m.nick}> ${m.text}`)
       }
     }
 
@@ -91,6 +90,15 @@ async function poll() {
 
   await saveHistory(history)
   await disconnect(client)
+
+  // PostToolUse hooks require JSON with additionalContext to be visible to the agent
+  if (lines.length > 0) {
+    console.log(JSON.stringify({
+      hookSpecificOutput: {
+        additionalContext: lines.join('\n'),
+      },
+    }))
+  }
 }
 
 // Promise.race with timeout — never block the agent
