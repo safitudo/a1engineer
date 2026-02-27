@@ -13,6 +13,7 @@ vi.mock('../orchestrator/compose.js', () => ({
 vi.mock('../irc/gateway.js', () => ({
   createGateway: vi.fn(),
   destroyGateway: vi.fn(),
+  getGateway: vi.fn().mockReturnValue(null),
 }))
 
 // Mock IRC router (in-memory, but mock for isolation)
@@ -352,11 +353,11 @@ describe('GET /api/teams/:id/channels', () => {
 // ── POST /api/teams/:id/channels/:name/messages (stub) ───────────────────────
 
 describe('POST /api/teams/:id/channels/:name/messages', () => {
-  it('returns 501 GATEWAY_NOT_READY when text provided', async () => {
+  it('returns 503 GATEWAY_NOT_READY when no IRC gateway connected', async () => {
     const created = await post(port, '/api/teams', VALID_TEAM)
     const teamId = created.body.id
     const res = await post(port, `/api/teams/${teamId}/channels/%23main/messages`, { text: 'hello' })
-    expect(res.status).toBe(501)
+    expect(res.status).toBe(503)
     expect(res.body.code).toBe('GATEWAY_NOT_READY')
   })
 

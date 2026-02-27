@@ -1,13 +1,9 @@
 import { Router } from 'express'
 import * as teamStore from '../store/teams.js'
 import { readMessages } from '../irc/router.js'
+import { getGateway } from '../irc/gateway.js'
 
 const router = Router({ mergeParams: true })
-
-const GATEWAY_NOT_READY = {
-  error: 'IRC gateway send not yet implemented',
-  code: 'GATEWAY_NOT_READY',
-}
 
 function requireTeam(req, res) {
   const team = teamStore.getTeam(req.params.id)
@@ -44,7 +40,17 @@ router.post('/:name/messages', (req, res) => {
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ error: 'text is required', code: 'MISSING_TEXT' })
   }
-  res.status(501).json(GATEWAY_NOT_READY)
+  const channel = `#${req.params.name}`
+  const gw = getGateway(team.id)
+  if (!gw) {
+    return res.status(503).json({ error: 'IRC gateway not connected for this team', code: 'GATEWAY_NOT_READY' })
+  }
+  try {
+    gw.say(channel, text)
+    return res.json({ ok: true, channel, text })
+  } catch (err) {
+    return res.status(500).json({ error: 'failed to send message', code: 'SEND_ERROR' })
+  }
 })
 
 export default router

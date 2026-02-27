@@ -84,6 +84,12 @@ export class IrcGateway extends EventEmitter {
     this.#reconnectDelay = Math.min(this.#reconnectDelay * RECONNECT_FACTOR, RECONNECT_MAX_MS)
   }
 
+  /** Send a message to a channel via IRC */
+  say(channel, text) {
+    if (!this.#client) throw new Error('IRC client not connected')
+    this.#client.say(channel, text)
+  }
+
   destroy() {
     this.#destroyed = true
     if (this.#reconnectTimer) {
