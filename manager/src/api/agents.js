@@ -192,7 +192,7 @@ router.post('/:agentId/nudge', async (req, res) => {
     : 'continue. check IRC with msg read, then resume your current task.'
 
   try {
-    await ptySend(team.id, agent.id, nudgeMsg)
+    await writeFifo(team.id, agent.id, `nudge ${nudgeMsg}`)
     return res.json({ ok: true, message: nudgeMsg })
   } catch (err) {
     console.error('[api/agents] nudge failed:', err)
@@ -231,10 +231,7 @@ router.post('/:agentId/directive', async (req, res) => {
   }
 
   try {
-    // Ctrl+C to stop current work, brief pause, then submit new instruction
-    await dockerExec(team.id, agent.id, ['tmux', 'send-keys', '-t', 'agent', 'C-c'])
-    await new Promise(r => setTimeout(r, 1000))
-    await ptySend(team.id, agent.id, message)
+    await writeFifo(team.id, agent.id, `directive ${message}`)
     return res.json({ ok: true, action: 'directive', message })
   } catch (err) {
     console.error('[api/agents] directive failed:', err)
