@@ -4,10 +4,14 @@ import { broadcastHeartbeat } from './ws.js'
 import teamsRouter from './teams.js'
 import agentsRouter from './agents.js'
 import channelsRouter from './channels.js'
+import authRouter from './auth.js'
 
 export function createApp() {
   const app = express()
   app.use(express.json())
+
+  // Auth
+  app.use('/api/auth', authRouter)
 
   // POST /heartbeat/:teamId/:agentId — keep-alive from agent containers
   app.post('/heartbeat/:teamId/:agentId', (req, res) => {
