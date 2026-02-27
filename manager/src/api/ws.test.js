@@ -35,8 +35,6 @@ vi.mock('../store/tenants.js', () => ({
 
 // ── Test setup ────────────────────────────────────────────────────────────────
 
-// attachWebSocketServer is idempotent (module-level singleton) — use one server
-// for all WS tests to avoid the guard preventing attachment on fresh servers.
 let server
 let port
 
@@ -57,40 +55,68 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-function wsConnect(url) {
+function wsConnect(path = '/ws') {
   return new Promise((resolve) => {
-    const ws = new WebSocket(url)
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${path}`)
     ws.on('open', () => resolve({ ws, code: null }))
     ws.on('unexpected-response', (req, res) => resolve({ ws: null, code: res.statusCode }))
     ws.on('error', () => resolve({ ws: null, code: null }))
   })
 }
 
+function sendAndReceive(ws, msg) {
+  return new Promise((resolve) => {
+    ws.once('message', (data) => resolve(JSON.parse(data)))
+    ws.send(JSON.stringify(msg))
+  })
+}
+
 // ── WS Auth tests ─────────────────────────────────────────────────────────────
 
-describe('WebSocket auth upgrade', () => {
-  it('rejects upgrade with 401 when no token provided', async () => {
-    const { code } = await wsConnect(`ws://127.0.0.1:${port}/ws`)
-    expect(code).toBe(401)
-  })
-
-  it('rejects upgrade with 401 when token is unknown (not in tenant store)', async () => {
-    findByApiKey.mockReturnValue(null)
-    const { code } = await wsConnect(`ws://127.0.0.1:${port}/ws?token=unknown-key`)
-    expect(code).toBe(401)
-  })
-
-  it('allows upgrade when token matches a known tenant', async () => {
-    const tenant = { id: 'tenant-uuid-1', apiKey: 'valid-key-123' }
-    findByApiKey.mockReturnValue(tenant)
-    const { ws, code } = await wsConnect(`ws://127.0.0.1:${port}/ws?token=valid-key-123`)
+describe('WebSocket first-message auth', () => {
+  it('accepts upgrade without token in URL (auth via first message)', async () => {
+    const { ws, code } = await wsConnect()
     expect(code).toBeNull()
     expect(ws).not.toBeNull()
     ws?.close()
   })
 
   it('rejects non-/ws path with 400', async () => {
-    const { code } = await wsConnect(`ws://127.0.0.1:${port}/other?token=any`)
+    const { code } = await wsConnect('/other')
     expect(code).toBe(400)
+  })
+
+  it('rejects non-auth first message', async () => {
+    const { ws } = await wsConnect()
+    const resp = await sendAndReceive(ws, { type: 'subscribe', teamId: 'test' })
+    expect(resp.type).toBe('error')
+    expect(resp.code).toBe('UNAUTHENTICATED')
+    ws.close()
+  })
+
+  it('rejects auth with missing token', async () => {
+    const { ws } = await wsConnect()
+    const resp = await sendAndReceive(ws, { type: 'auth' })
+    expect(resp.type).toBe('error')
+    expect(resp.code).toBe('MISSING_TOKEN')
+    ws.close()
+  })
+
+  it('rejects auth with unknown token', async () => {
+    findByApiKey.mockReturnValue(null)
+    const { ws } = await wsConnect()
+    const resp = await sendAndReceive(ws, { type: 'auth', token: 'bad-key' })
+    expect(resp.type).toBe('error')
+    expect(resp.code).toBe('UNAUTHORIZED')
+    ws.close()
+  })
+
+  it('accepts auth with valid token', async () => {
+    const tenant = { id: 'tenant-uuid-1', apiKey: 'valid-key-123' }
+    findByApiKey.mockReturnValue(tenant)
+    const { ws } = await wsConnect()
+    const resp = await sendAndReceive(ws, { type: 'auth', token: 'valid-key-123' })
+    expect(resp.type).toBe('authenticated')
+    ws.close()
   })
 })
