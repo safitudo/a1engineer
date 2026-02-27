@@ -94,6 +94,20 @@ async function tmuxSendKeys(teamId, agentId, keys) {
   await dockerExec(teamId, agentId, ['tmux', 'send-keys', '-t', 'agent', ...keys])
 }
 
+// ── Helper: write command to sidecar FIFO ────────────────────────────────────
+// The sidecar nudge_listener routes commands correctly based on agent mode:
+//   print-loop → writes to /tmp/agent-inbox.txt
+//   interactive → sends via tmux send-keys
+async function writeFifo(teamId, agentId, command) {
+  // Use env var to safely pass arbitrary payload without shell escaping issues
+  const serviceName = `agent-${agentId}`
+  const cf = composeFile(teamId)
+  const args = ['compose', '-f', cf, 'exec', '-T', '-u', 'agent',
+    '-e', `FIFO_CMD=${command}`,
+    serviceName, 'bash', '-c', 'printf "%s\\n" "$FIFO_CMD" > /tmp/nudge.fifo']
+  await execFileAsync('docker', args, { timeout: 15000 })
+}
+
 // GET /api/teams/:id/agents/:agentId/screen — capture agent's tmux screen
 router.get('/:agentId/screen', async (req, res) => {
   const team = teamStore.getTeam(req.params.id)
@@ -164,7 +178,7 @@ router.post('/:agentId/nudge', async (req, res) => {
     : 'continue. check IRC with msg read, then resume your current task.'
 
   try {
-    await tmuxSendKeys(team.id, agent.id, [nudgeMsg, 'Enter'])
+    await writeFifo(team.id, agent.id, `nudge ${nudgeMsg}`)
     return res.json({ ok: true, message: nudgeMsg })
   } catch (err) {
     console.error('[api/agents] nudge failed:', err)
@@ -181,7 +195,7 @@ router.post('/:agentId/interrupt', async (req, res) => {
   if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
 
   try {
-    await tmuxSendKeys(team.id, agent.id, ['C-c'])
+    await writeFifo(team.id, agent.id, 'interrupt')
     return res.json({ ok: true, action: 'interrupt' })
   } catch (err) {
     console.error('[api/agents] interrupt failed:', err)
@@ -203,10 +217,7 @@ router.post('/:agentId/directive', async (req, res) => {
   }
 
   try {
-    // Ctrl+C to stop current work, brief pause, then new instruction
-    await tmuxSendKeys(team.id, agent.id, ['C-c'])
-    await new Promise(r => setTimeout(r, 500))
-    await tmuxSendKeys(team.id, agent.id, [message, 'Enter'])
+    await writeFifo(team.id, agent.id, `directive ${message}`)
     return res.json({ ok: true, action: 'directive', message })
   } catch (err) {
     console.error('[api/agents] directive failed:', err)
