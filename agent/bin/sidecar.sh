@@ -102,7 +102,15 @@ nudge_listener() {
           if [ -f /tmp/agent-mode-print ]; then
             echo "[NUDGE] $MSG" >> /tmp/agent-inbox.txt
           else
-            su -s /bin/bash "$TMUX_USER" -c "tmux send-keys -t $TMUX_SESSION '$MSG' Enter" 2>/dev/null || true
+            # paste-buffer + raw CR — tmux send-keys doesn't work with Ink TUI
+            su -s /bin/bash "$TMUX_USER" -c "
+              tmux send-keys -t $TMUX_SESSION C-u
+              sleep 0.1
+              tmux set-buffer -b _nudge \"\$MSG\"
+              tmux paste-buffer -b _nudge -t $TMUX_SESSION
+              sleep 0.1
+              tmux send-keys -t $TMUX_SESSION -H 0d
+            " 2>/dev/null || true
           fi
           log "nudged: $MSG"
           ;;
@@ -116,8 +124,15 @@ nudge_listener() {
               echo "[DIRECTIVE] $PAYLOAD" >> /tmp/agent-inbox.txt
             else
               su -s /bin/bash "$TMUX_USER" -c "tmux send-keys -t $TMUX_SESSION C-c" 2>/dev/null || true
-              sleep 0.5
-              su -s /bin/bash "$TMUX_USER" -c "tmux send-keys -t $TMUX_SESSION '$PAYLOAD' Enter" 2>/dev/null || true
+              sleep 1
+              su -s /bin/bash "$TMUX_USER" -c "
+                tmux send-keys -t $TMUX_SESSION C-u
+                sleep 0.1
+                tmux set-buffer -b _nudge \"\$MSG\"
+                tmux paste-buffer -b _nudge -t $TMUX_SESSION
+                sleep 0.1
+                tmux send-keys -t $TMUX_SESSION -H 0d
+              " 2>/dev/null || true
             fi
             log "directive: $PAYLOAD"
           fi

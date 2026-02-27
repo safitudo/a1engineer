@@ -129,6 +129,21 @@ async function main() {
       break
     }
 
+    case 'exec': {
+      requireTeamId()
+      const agentId = args[0]
+      requireArg('agentId', agentId)
+      const command = args.slice(1)
+      if (command.length === 0) {
+        console.error('Usage: chuck exec <agentId> <command...>')
+        process.exit(1)
+      }
+      const { data } = await api('POST', `/api/teams/${TEAM_ID}/agents/${agentId}/exec`, { command })
+      if (data.output) console.log(data.output)
+      if (!data.ok) process.exit(1)
+      break
+    }
+
     default:
       console.log(`chuck — orchestrator CLI
 
@@ -140,6 +155,7 @@ Usage:
   chuck nudge <agentId> [message]         Nudge agent
   chuck interrupt <agentId>               Ctrl+C to stop agent
   chuck directive <agentId> <message>     Interrupt + new instruction
+  chuck exec <agentId> <command...>       Run command in agent container
 
 Env: MANAGER_URL=${MANAGER_URL}  TEAM_ID=${TEAM_ID || '(not set)'}`)
       break

@@ -94,6 +94,20 @@ async function tmuxSendKeys(teamId, agentId, keys) {
   await dockerExec(teamId, agentId, ['tmux', 'send-keys', '-t', 'agent', ...keys])
 }
 
+// ── Helper: submit text to Claude Code's Ink TUI via paste-buffer + raw CR ──
+// tmux send-keys doesn't work with Ink (text stacks, Enter never submits).
+// paste-buffer sends text in bulk, then raw 0x0d triggers submit.
+async function ptySend(teamId, agentId, message) {
+  const serviceName = `agent-${agentId}`
+  const cf = composeFile(teamId)
+  // Pass message via env var to avoid shell escaping issues
+  const args = ['compose', '-f', cf, 'exec', '-T', '-u', 'agent',
+    '-e', `MSG=${message}`,
+    serviceName, 'bash', '-c',
+    'tmux send-keys -t agent C-u; sleep 0.1; tmux set-buffer -b _nudge "$MSG"; tmux paste-buffer -b _nudge -t agent; sleep 0.1; tmux send-keys -t agent -H 0d']
+  await execFileAsync('docker', args, { timeout: 15000 })
+}
+
 // ── Helper: write command to sidecar FIFO ────────────────────────────────────
 // The sidecar nudge_listener routes commands correctly based on agent mode:
 //   print-loop → writes to /tmp/agent-inbox.txt
@@ -178,7 +192,7 @@ router.post('/:agentId/nudge', async (req, res) => {
     : 'continue. check IRC with msg read, then resume your current task.'
 
   try {
-    await writeFifo(team.id, agent.id, `nudge ${nudgeMsg}`)
+    await ptySend(team.id, agent.id, nudgeMsg)
     return res.json({ ok: true, message: nudgeMsg })
   } catch (err) {
     console.error('[api/agents] nudge failed:', err)
@@ -217,11 +231,37 @@ router.post('/:agentId/directive', async (req, res) => {
   }
 
   try {
-    await writeFifo(team.id, agent.id, `directive ${message}`)
+    // Ctrl+C to stop current work, brief pause, then submit new instruction
+    await dockerExec(team.id, agent.id, ['tmux', 'send-keys', '-t', 'agent', 'C-c'])
+    await new Promise(r => setTimeout(r, 1000))
+    await ptySend(team.id, agent.id, message)
     return res.json({ ok: true, action: 'directive', message })
   } catch (err) {
     console.error('[api/agents] directive failed:', err)
     return res.status(500).json({ error: 'directive failed', code: 'EXEC_ERROR' })
+  }
+})
+
+// POST /api/teams/:id/agents/:agentId/exec — run arbitrary command inside agent container
+router.post('/:agentId/exec', async (req, res) => {
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+
+  const agent = team.agents.find((a) => a.id === req.params.agentId)
+  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
+
+  const { command } = req.body ?? {}
+  if (!command || !Array.isArray(command) || command.length === 0) {
+    return res.status(400).json({ error: 'command is required (array of strings)', code: 'MISSING_COMMAND' })
+  }
+
+  try {
+    const output = await dockerExec(team.id, agent.id, command, { timeout: 30000 })
+    return res.json({ ok: true, output: output.trim() })
+  } catch (err) {
+    // Return stderr/exit info even on failure
+    const stderr = err.stderr?.trim() ?? err.message
+    return res.json({ ok: false, output: stderr, code: err.code })
   }
 })
 
