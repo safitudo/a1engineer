@@ -117,7 +117,7 @@ describe('startNudger', () => {
     expect(writeFifo).not.toHaveBeenCalled()
   })
 
-  it('skips chuck role', async () => {
+  it('skips chuck role by default', async () => {
     listTeams.mockReturnValue([
       makeTeam({
         agents: [{ id: 'agent-chuck', role: 'chuck', last_heartbeat: STALE_HB }],
@@ -129,6 +129,43 @@ describe('startNudger', () => {
     stop()
 
     expect(writeFifo).not.toHaveBeenCalled()
+  })
+
+  it('nudges chuck when includeChuck is true', async () => {
+    listTeams.mockReturnValue([
+      makeTeam({
+        autoNudge: { enabled: true, idleThresholdSeconds: 300, includeChuck: true },
+        agents: [{ id: 'agent-chuck', role: 'chuck', last_heartbeat: STALE_HB }],
+      }),
+    ])
+
+    const { stop } = startNudger()
+    await tick()
+    stop()
+
+    expect(writeFifo).toHaveBeenCalledOnce()
+    const [teamId, agentId] = writeFifo.mock.calls[0]
+    expect(teamId).toBe('team-1')
+    expect(agentId).toBe('agent-chuck')
+  })
+
+  it('skips chuck but nudges other agents when includeChuck is false', async () => {
+    listTeams.mockReturnValue([
+      makeTeam({
+        autoNudge: { enabled: true, idleThresholdSeconds: 300, includeChuck: false },
+        agents: [
+          { id: 'agent-chuck', role: 'chuck', last_heartbeat: STALE_HB },
+          { id: 'agent-dev', role: 'dev', last_heartbeat: STALE_HB },
+        ],
+      }),
+    ])
+
+    const { stop } = startNudger()
+    await tick()
+    stop()
+
+    expect(writeFifo).toHaveBeenCalledOnce()
+    expect(writeFifo.mock.calls[0][1]).toBe('agent-dev')
   })
 
   it('skips teams not in running status', async () => {

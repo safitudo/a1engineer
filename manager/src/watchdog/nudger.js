@@ -28,8 +28,8 @@ export function startNudger() {
       const now = Date.now()
 
       for (const agent of team.agents ?? []) {
-        // Skip chuck — it's the orchestrator, not a worker
-        if (agent.role === 'chuck') continue
+        // Skip chuck unless explicitly opted in via autoNudge.includeChuck
+        if (agent.role === 'chuck' && !nudgeConfig.includeChuck) continue
 
         if (!agent.last_heartbeat) continue
         const lastHb = new Date(agent.last_heartbeat).getTime()
