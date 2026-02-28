@@ -119,4 +119,18 @@ test.describe('Dashboard — authenticated', () => {
     const link = page.getByRole('link', { name: /Link Test Team/ })
     await expect(link).toHaveAttribute('href', '/dashboard/teams/team-abc')
   })
+
+  test('shows error when API returns 401 with valid cookie present', async ({ page }) => {
+    await authenticate(page)
+    await page.route('/api/teams', route =>
+      route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'unauthorized' }) })
+    )
+
+    await page.goto('/dashboard')
+    await page.waitForLoadState('networkidle')
+
+    // 401 from the backend while cookie is present shows error text — no redirect
+    await expect(page.getByText(/Failed to load teams/i)).toBeVisible()
+    await expect(page).not.toHaveURL(/\/login/)
+  })
 })
