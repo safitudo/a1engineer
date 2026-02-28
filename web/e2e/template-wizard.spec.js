@@ -374,4 +374,77 @@ test.describe('Templates page CRUD', () => {
     // Error from API should appear in the form
     await expect(page.getByText('name is required')).toBeVisible()
   })
+
+  test('editing a template pre-populates the form', async ({ page }) => {
+    const EDITABLE = {
+      id: 'custom-edit',
+      name: 'Edit Me',
+      description: 'original desc',
+      builtin: false,
+      agents: [{ role: 'dev', model: 'haiku', runtime: 'claude-code', effort: 'low', prompt: '' }],
+      tags: [],
+    }
+    const UPDATED = { ...EDITABLE, name: 'Edited Name', description: 'updated desc' }
+
+    await authenticate(page)
+    await page.route('/api/templates', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [EDITABLE] }),
+      })
+    )
+    await page.route('/api/templates/custom-edit', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(UPDATED),
+      })
+    )
+
+    await page.goto('/dashboard/templates')
+    await page.waitForLoadState('networkidle')
+
+    await page.getByRole('button', { name: 'Edit' }).click()
+
+    // Form should be pre-populated with existing template data
+    await expect(page.getByRole('heading', { name: 'Edit Template' })).toBeVisible()
+    await expect(page.getByPlaceholder('e.g. Full-Stack Team')).toHaveValue('Edit Me')
+
+    await page.getByPlaceholder('e.g. Full-Stack Team').fill('Edited Name')
+    await page.getByRole('button', { name: 'Save Changes' }).click()
+
+    await expect(page.getByText('Edited Name')).toBeVisible()
+  })
+
+  test('deleting a template removes it from the list', async ({ page }) => {
+    const DELETABLE = {
+      id: 'custom-del',
+      name: 'Delete Me',
+      builtin: false,
+      agents: [{ role: 'dev', model: 'sonnet', runtime: 'claude-code', effort: 'high', prompt: '' }],
+      tags: [],
+    }
+
+    await authenticate(page)
+    await page.route('/api/templates', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ templates: [DELETABLE] }),
+      })
+    )
+    await page.route('/api/templates/custom-del', route =>
+      route.fulfill({ status: 204, body: '' })
+    )
+
+    await page.goto('/dashboard/templates')
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByText('Delete Me')).toBeVisible()
+
+    page.on('dialog', dialog => dialog.accept())
+    await page.getByRole('button', { name: 'Delete' }).click()
+
+    await expect(page.getByText('Delete Me')).not.toBeVisible()
+  })
 })
