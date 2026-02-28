@@ -297,6 +297,30 @@ describe('PATCH /api/teams/:id', () => {
     expect(res.status).toBe(400)
     expect(res.body.code).toBe('INVALID_CHANNELS')
   })
+
+  it('calls gateway.updateChannels when a live gateway exists', async () => {
+    const { getGateway } = await import('../irc/gateway.js')
+    const mockUpdateChannels = vi.fn()
+    getGateway.mockReturnValueOnce({ updateChannels: mockUpdateChannels })
+
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const res = await patch(port, `/api/teams/${teamId}`, { channels: ['#main', '#ops'] })
+
+    expect(res.status).toBe(200)
+    expect(mockUpdateChannels).toHaveBeenCalledWith(['#main', '#ops'])
+  })
+
+  it('does not call gateway.updateChannels when no live gateway', async () => {
+    const { getGateway } = await import('../irc/gateway.js')
+    // Default mock returns null — PATCH should still succeed
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const res = await patch(port, `/api/teams/${teamId}`, { channels: ['#main'] })
+
+    expect(res.status).toBe(200)
+    expect(getGateway).toHaveBeenCalledWith(teamId)
+  })
 })
 
 // ── DELETE /api/teams/:id ─────────────────────────────────────────────────────

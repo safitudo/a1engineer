@@ -7,9 +7,6 @@ import {
   updateTemplate,
   deleteTemplate,
   getTenantTemplates,
-  restoreTenantTemplates,
-  loadTenantTemplates,
-  rehydrateTenantTemplates,
 } from './templates.js'
 
 beforeAll(() => initDb(':memory:'))
@@ -321,63 +318,3 @@ describe('getTenantTemplates', () => {
   })
 })
 
-// ── restoreTenantTemplates ────────────────────────────────────────────────────
-
-describe('restoreTenantTemplates', () => {
-  it('inserts templates for a tenant', () => {
-    const now = new Date().toISOString()
-    restoreTenantTemplates('tenant-restore', [
-      { id: 'restored-1', name: 'R1', description: 'desc', agents: [AGENT], createdAt: now, updatedAt: now },
-    ])
-
-    const fetched = getTemplate('restored-1', 'tenant-restore')
-    expect(fetched).not.toBeNull()
-    expect(fetched.name).toBe('R1')
-    expect(fetched.tenantId).toBe('tenant-restore')
-  })
-
-  it('replaces existing template on conflict (INSERT OR REPLACE)', () => {
-    const now = new Date().toISOString()
-    restoreTenantTemplates('tenant-restore', [
-      { id: 'conflict-id', name: 'First', description: '', agents: [AGENT], createdAt: now, updatedAt: now },
-    ])
-    restoreTenantTemplates('tenant-restore', [
-      { id: 'conflict-id', name: 'Second', description: '', agents: [AGENT], createdAt: now, updatedAt: now },
-    ])
-
-    const fetched = getTemplate('conflict-id', 'tenant-restore')
-    expect(fetched.name).toBe('Second')
-  })
-
-  it('inserts multiple templates in one call', () => {
-    const now = new Date().toISOString()
-    restoreTenantTemplates('tenant-multi', [
-      { id: 'multi-1', name: 'M1', description: '', agents: [AGENT], createdAt: now, updatedAt: now },
-      { id: 'multi-2', name: 'M2', description: '', agents: [AGENT], createdAt: now, updatedAt: now },
-    ])
-
-    expect(getTenantTemplates('tenant-multi').length).toBe(2)
-  })
-})
-
-// ── loadTenantTemplates (no-op) ───────────────────────────────────────────────
-
-describe('loadTenantTemplates', () => {
-  it('resolves without error (no-op)', async () => {
-    await expect(loadTenantTemplates('any-tenant')).resolves.toBeUndefined()
-  })
-
-  it('does not add any templates to the store', async () => {
-    await loadTenantTemplates('empty-tenant')
-    expect(getTenantTemplates('empty-tenant')).toEqual([])
-  })
-})
-
-// ── rehydrateTenantTemplates (no-op) ─────────────────────────────────────────
-
-describe('rehydrateTenantTemplates', () => {
-  it('returns empty array', async () => {
-    const result = await rehydrateTenantTemplates()
-    expect(result).toEqual([])
-  })
-})
