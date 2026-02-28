@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useTeamWS } from './TeamWSProvider'
+import IrcMessageInput from './IrcMessageInput'
 
 // Deterministic color per nick
 const NICK_COLORS = ['#3fb950', '#79c0ff', '#d2a8ff', '#ffa657', '#ff7b72', '#a5d6ff']
@@ -26,7 +27,7 @@ function formatTime(iso) {
 
 const MAX_MESSAGES = 500
 
-export default function IrcFeed({ teamId }) {
+export default function IrcFeed({ teamId, channels }) {
   const { status, addListener } = useTeamWS()
   const [messages, setMessages] = useState([])
   const bottomRef = useRef(null)
@@ -99,6 +100,8 @@ export default function IrcFeed({ teamId }) {
         )}
         <div ref={bottomRef} />
       </div>
+
+      <IrcMessageInput teamId={teamId} channels={channels} wsStatus={status} />
     </div>
   )
 }

@@ -359,7 +359,7 @@ export default function TeamDetailPage() {
             </>
           )}
           <div className="flex-1 flex flex-col min-w-0">
-            <IrcFeed teamId={id} />
+            <IrcFeed teamId={id} channels={team?.channels} />
           </div>
         </div>
       </div>
