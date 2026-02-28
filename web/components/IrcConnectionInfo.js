@@ -16,20 +16,15 @@ export default function IrcConnectionInfo({ team }) {
   const [copied, setCopied] = useState(null)
 
   const ergo         = team?.ergo ?? {}
-  const hostPort     = ergo.hostPort ?? null          // e.g. "irc.example.com:6697" (external)
+  const hostPort     = ergo.hostPort ?? null          // number: externally-mapped port (e.g. 16667)
   const internalPort = ergo.port ?? 6667
   const hostname     = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
 
-  // Resolve the display host + port used for connection
-  const displayHost = hostPort
-    ? hostPort.includes(':') ? hostPort.split(':')[0] : hostPort
-    : `ergo-${team?.name ?? 'team'}`
-  const displayPort = hostPort
-    ? hostPort.includes(':') ? hostPort.split(':')[1] : String(internalPort)
-    : String(internalPort)
-
-  // For external access, prefer hostPort as-is; otherwise use window hostname + internal port
-  const connectAddr = hostPort ?? `${hostname}:${internalPort}`
+  // When hostPort is set, it's an external port mapped on the host machine.
+  // Always use window.location.hostname as the host; the port is hostPort or internalPort.
+  const displayHost = hostPort ? hostname : `ergo-${team?.name ?? 'team'}`
+  const displayPort = String(hostPort ?? internalPort)
+  const connectAddr = `${displayHost}:${displayPort}`
   const ircUri      = `irc://${connectAddr}`
 
   const channels = team?.channels ?? ['#main', '#tasks', '#code', '#testing', '#merges']
