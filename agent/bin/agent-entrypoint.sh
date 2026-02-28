@@ -100,13 +100,15 @@ ENVEOF
 chmod 644 /tmp/agent-env.sh
 
 # ── Write runtime-specific launch script ────────────────────────────────────
-# Runs INSIDE tmux. All Claude Code agents use --print --continue loop.
-# --print controls output format, not auth. Session credentials (.credentials.json)
-# are read by Claude Code at startup regardless of output mode.
+# Runs INSIDE tmux. Two modes:
+#   API key  → --print --continue loop (reads from /tmp/agent-inbox.txt)
+#   Session  → interactive TUI (nudges via paste-buffer + raw CR)
 case "$AGENT_RUNTIME" in
   claude-code)
-    touch /tmp/agent-mode-print  # signal to sidecar (print-loop mode for nudge/IRC routing)
-    cat > /tmp/launch-agent.sh <<'LAUNCH'
+    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+      # API key mode: --print loop
+      touch /tmp/agent-mode-print  # signal to sidecar
+      cat > /tmp/launch-agent.sh <<'LAUNCH'
 #!/usr/bin/env bash
 source /tmp/agent-env.sh 2>/dev/null || true
 
@@ -145,6 +147,18 @@ while true; do
   sleep 3
 done
 LAUNCH
+    else
+      # Session auth: interactive TUI (nudges via paste-buffer)
+      cat > /tmp/launch-agent.sh <<'LAUNCH'
+#!/usr/bin/env bash
+source /tmp/agent-env.sh 2>/dev/null || true
+if [ -f /tmp/prompt.md ]; then
+  exec claude --dangerously-skip-permissions --model "$MODEL" "$(cat /tmp/prompt.md)"
+else
+  exec claude --dangerously-skip-permissions --model "$MODEL"
+fi
+LAUNCH
+    fi
     ;;
   codex)
     cat > /tmp/launch-agent.sh <<'LAUNCH'

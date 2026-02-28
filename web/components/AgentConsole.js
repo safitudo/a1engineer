@@ -1,51 +1,120 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-
-const API_BASE = ''
+import { useEffect, useRef } from 'react'
+import { useTeamWS } from './TeamWSProvider'
 
 /**
- * AgentConsole — Phase 2 read-only terminal view.
- * Polls GET /api/teams/:teamId/agents/:agentId/screen every 2s
- * and renders the tmux capture output in a terminal-style div.
+ * AgentConsole — Phase 3 interactive terminal (shared WS via TeamWSProvider).
+ * Uses useTeamWS() context for attachConsole/detachConsole/sendInput/resizeConsole
+ * instead of managing its own WebSocket connection.
  *
  * Props: { teamId, agentId, onClose }
  */
 export default function AgentConsole({ teamId, agentId, onClose }) {
-  const [lines, setLines] = useState([])
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const bottomRef = useRef(null)
+  const containerRef = useRef(null)
+  const { attachConsole, detachConsole, sendInput, resizeConsole, addListener } = useTeamWS()
 
   useEffect(() => {
-    let active = true
+    if (!containerRef.current) return
 
-    async function poll() {
-      try {
-        const res = await fetch(`${API_BASE}/api/teams/${teamId}/agents/${agentId}/screen`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = await res.json()
-        if (active) {
-          setLines(data.lines ?? [])
-          setError(null)
-          setLoading(false)
-        }
-      } catch (err) {
-        if (active) {
-          setError(err.message)
-          setLoading(false)
-        }
-      }
+    let terminal = null
+    let fitAddon = null
+    let disposed = false
+    let attached = false
+    let lastData = null
+    let dataUnsubscribe = null
+    let attachedUnsubscribe = null
+    let detachedUnsubscribe = null
+    let errorUnsubscribe = null
+    let observer = null
+
+    async function init() {
+      // Dynamic import — xterm.js is browser-only
+      const [{ Terminal }, { FitAddon }] = await Promise.all([
+        import('@xterm/xterm'),
+        import('@xterm/addon-fit'),
+      ])
+      await import('@xterm/xterm/css/xterm.css')
+
+      if (disposed) return
+
+      terminal = new Terminal({
+        cursorBlink: true,
+        theme: {
+          background: '#010409',
+          foreground: '#c9d1d9',
+          cursor: '#3fb950',
+          selectionBackground: '#264f78',
+        },
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontSize: 12,
+        scrollback: 1000,
+      })
+      fitAddon = new FitAddon()
+      terminal.loadAddon(fitAddon)
+      terminal.open(containerRef.current)
+      fitAddon.fit()
+
+      // Listen for console.attached to know when streaming starts
+      attachedUnsubscribe = addListener('console.attached', (msg) => {
+        if (msg.agentId !== agentId) return
+        attached = true
+        terminal.clear()
+      })
+
+      // Listen for console.detached — server stopped streaming (agent stopped, WS reconnect, etc.)
+      detachedUnsubscribe = addListener('console.detached', (msg) => {
+        if (msg.agentId !== agentId || !terminal) return
+        attached = false
+        terminal.writeln('\x1b[90m[detached]\x1b[0m')
+      })
+
+      // Listen for error frames from the server
+      errorUnsubscribe = addListener('error', (msg) => {
+        if (!terminal) return
+        terminal.writeln(`\x1b[31m[error] ${msg.code ?? ''}: ${msg.message ?? ''}\x1b[0m`)
+      })
+
+      // Listen for console.data frames — full tmux snapshot every 500ms
+      dataUnsubscribe = addListener('console.data', (msg) => {
+        if (msg.agentId !== agentId || !terminal) return
+        if (msg.data === lastData) return
+        lastData = msg.data
+        // Overwrite visible area, preserve scrollback
+        terminal.write('\x1b[2J\x1b[H')
+        terminal.write(msg.data)
+      })
+
+      // Forward keystrokes to tmux via shared WS
+      terminal.onData((data) => {
+        if (attached) sendInput(agentId, data)
+      })
+
+      // Resize terminal when container changes — notify server via shared WS
+      observer = new ResizeObserver(() => {
+        if (!terminal || !fitAddon) return
+        try { fitAddon.fit() } catch { /* container may be hidden */ }
+        if (attached) resizeConsole(agentId, terminal.cols, terminal.rows)
+      })
+      observer.observe(containerRef.current)
+
+      terminal.writeln('\x1b[90mAttaching…\x1b[0m')
+      attachConsole(teamId, agentId)
     }
 
-    poll()
-    const interval = setInterval(poll, 2000)
-    return () => { active = false; clearInterval(interval) }
-  }, [teamId, agentId])
+    init()
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [lines])
+    return () => {
+      disposed = true
+      dataUnsubscribe?.()
+      attachedUnsubscribe?.()
+      detachedUnsubscribe?.()
+      errorUnsubscribe?.()
+      observer?.disconnect()
+      detachConsole(agentId)
+      terminal?.dispose()
+    }
+  }, [teamId, agentId, attachConsole, detachConsole, sendInput, resizeConsole, addListener])
 
   return (
     <div className="bg-[#010409] border border-[#30363d] rounded-lg flex flex-col overflow-hidden">
@@ -68,28 +137,11 @@ export default function AgentConsole({ teamId, agentId, onClose }) {
         </div>
       </div>
 
-      {/* Terminal body */}
-      <div className="flex-1 overflow-y-auto p-3 max-h-80 min-h-[160px]">
-        {loading && (
-          <div className="text-[#8b949e] text-xs font-mono animate-pulse">
-            Connecting to agent…
-          </div>
-        )}
-        {error && (
-          <div className="text-[#f85149] text-xs font-mono">
-            Error: {error}
-          </div>
-        )}
-        {!loading && !error && lines.length === 0 && (
-          <div className="text-[#8b949e] text-xs font-mono italic">
-            No output captured.
-          </div>
-        )}
-        <pre className="text-xs font-mono text-[#c9d1d9] whitespace-pre-wrap break-all leading-relaxed">
-          {lines.join('\n')}
-        </pre>
-        <div ref={bottomRef} />
-      </div>
+      {/* xterm.js mounts here — needs explicit height for FitAddon */}
+      <div
+        ref={containerRef}
+        style={{ minHeight: '200px', padding: '4px' }}
+      />
     </div>
   )
 }

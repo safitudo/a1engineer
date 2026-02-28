@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import IrcFeed from '../../../../components/IrcFeed'
 import AgentConsole from '../../../../components/AgentConsole'
+import { TeamWSProvider } from '../../../../components/TeamWSProvider'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -67,6 +68,76 @@ function timeAgo(ts) {
   if (secs < 60) return `${secs}s ago`
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
   return `${Math.floor(secs / 3600)}h ago`
+}
+
+// ── IRC connection info ────────────────────────────────────────────────────────
+
+const IRC_CHANNELS = ['#main', '#tasks', '#code', '#testing', '#merges']
+
+function IrcConnectionInfo({ team }) {
+  const [copied, setCopied] = useState(null)
+  const ergo = team.ergo ?? {}
+  const hostPort = ergo.hostPort ?? null
+  const internalPort = ergo.port ?? 6667
+  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
+
+  function copy(text, key) {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(key)
+      setTimeout(() => setCopied(null), 1500)
+    })
+  }
+
+  return (
+    <div className="text-xs font-mono space-y-2">
+      {hostPort ? (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[#8b949e]">host</span>
+            <span className="text-[#e6edf3]">{host}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[#8b949e]">port</span>
+            <span className="text-[#e6edf3]">{hostPort}</span>
+          </div>
+          <button
+            onClick={() => copy(`${host}:${hostPort}`, 'addr')}
+            className="w-full text-left px-2 py-1 rounded bg-[#161b22] border border-[#30363d] hover:border-[#3fb950]/40 text-[#8b949e] hover:text-[#3fb950] transition-colors"
+          >
+            {copied === 'addr' ? '✓ copied' : `copy ${host}:${hostPort}`}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[#8b949e]">host</span>
+            <span className="text-[#e6edf3]">{`ergo-${team.name}`}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[#8b949e]">port</span>
+            <span className="text-[#e6edf3]">{internalPort}</span>
+          </div>
+          <div className="text-[#8b949e] text-[10px] leading-relaxed">
+            internal only — set <span className="text-[#e6edf3]">ergo.hostPort</span> to expose
+          </div>
+        </>
+      )}
+      <div>
+        <div className="text-[#8b949e] mb-1.5">channels</div>
+        <div className="flex flex-wrap gap-1">
+          {IRC_CHANNELS.map(ch => (
+            <button
+              key={ch}
+              onClick={() => copy(ch, ch)}
+              className="px-1.5 py-0.5 rounded bg-[#161b22] border border-[#30363d] text-[#79c0ff] hover:border-[#79c0ff]/40 hover:bg-[#79c0ff]/5 transition-colors"
+            >
+              {copied === ch ? '✓' : ch}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Agent card ────────────────────────────────────────────────────────────────
@@ -178,6 +249,7 @@ export default function TeamDetailPage() {
   }
 
   return (
+    <TeamWSProvider teamId={id}>
     <div className="min-h-screen bg-[#0d1117] pt-14 flex flex-col">
       {/* Top bar */}
       <div className="border-b border-[#30363d] bg-[#0d1117] px-6 py-4">
@@ -205,7 +277,7 @@ export default function TeamDetailPage() {
       {/* Body: 2-panel layout */}
       <div className="flex-1 flex overflow-hidden max-w-7xl mx-auto w-full px-6 py-6 gap-6">
 
-        {/* Left: agent cards */}
+        {/* Left: agent cards + IRC info */}
         <aside className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-xs font-mono text-[#8b949e] uppercase tracking-wider">Agents</h2>
@@ -223,6 +295,12 @@ export default function TeamDetailPage() {
               />
             ))
           )}
+
+          {/* IRC connection details */}
+          <div className="mt-2 pt-3 border-t border-[#30363d]">
+            <h2 className="text-xs font-mono text-[#8b949e] uppercase tracking-wider mb-2">IRC Server</h2>
+            <IrcConnectionInfo team={team} />
+          </div>
         </aside>
 
         {/* Right: IRC feed + agent console */}
@@ -240,5 +318,6 @@ export default function TeamDetailPage() {
         </div>
       </div>
     </div>
+    </TeamWSProvider>
   )
 }

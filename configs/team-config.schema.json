@@ -95,6 +95,13 @@
             "type": "string",
             "description": "Per-agent auth override. 'session' uses host OAuth tokens (~/.claude mount), 'api-key' uses ANTHROPIC_API_KEY from Docker secret. Defaults to team-level auth.mode.",
             "enum": ["session", "api-key"]
+          },
+          "env": {
+            "type": "object",
+            "description": "Extra environment variables injected into this agent's container. Values are coerced to strings.",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean"]
+            }
           }
         }
       }

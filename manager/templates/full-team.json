@@ -1,0 +1,39 @@
+{
+  "id": "full-team",
+  "name": "Full Team",
+  "description": "Complete 5-agent engineering team: Tech Lead, Architect, Developer, QA, and Critic. Best for greenfield projects or complex feature work requiring deep review.",
+  "runtime": "claude-code",
+  "agents": [
+    {
+      "role": "lead",
+      "model": "claude-opus-4-6",
+      "prompt": "You are the Tech Lead. Own the #tasks channel — create GitHub Issues, assign work, and post [ASSIGN] messages. Coordinate the team, unblock agents, and ensure PRs merge cleanly. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 80 }
+    },
+    {
+      "role": "arch",
+      "model": "claude-opus-4-6",
+      "prompt": "You are the Architect. Design system structure, review PRs for architectural correctness, and post specs on #code. Post [BLOCK] if a design violates agreed patterns. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 80 }
+    },
+    {
+      "role": "dev",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are the Developer. Implement assigned GitHub Issues, open PRs referencing the issue (Fixes #NN), and post [PR] on #code when ready. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 50 }
+    },
+    {
+      "role": "qa",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are QA. Write and run tests for every PR. Post [REVIEW] approved or [BLOCK] on #code. No PR merges without your approval. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 50 }
+    },
+    {
+      "role": "critic",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are the Critic. Review code quality, security, and maintainability. Post [REVIEW] or [BLOCK] on #code. Be specific — cite file and line. Run msg read every few tool calls.",
+      "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": 50 }
+    }
+  ],
+  "tags": ["recommended", "full-stack", "production"]
+}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -12,13 +12,22 @@ const RUNTIMES = [
 ]
 
 const MODELS = [
-  { id: '', label: 'Default (claude-sonnet-4-6)' },
-  { id: 'claude-opus-4-6', label: 'claude-opus-4-6' },
-  { id: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
-  { id: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5-20251001' },
+  { id: 'sonnet', label: 'sonnet (default)' },
+  { id: 'opus', label: 'opus' },
+  { id: 'haiku', label: 'haiku' },
 ]
 
-const STEPS = ['Team', 'Runtime', 'Agents', 'API Key', 'Review']
+const STEPS = ['Template', 'Team', 'Runtime', 'Agents', 'API Key', 'Review']
+
+// Sentinel for "no template / fully custom"
+const CUSTOM_TEMPLATE = {
+  id: 'custom',
+  name: 'Custom',
+  description: 'Start from scratch with a blank configuration.',
+  runtime: 'claude-code',
+  agents: [{ role: 'dev', model: 'sonnet', prompt: '' }],
+  tags: [],
+}
 
 function StepIndicator({ current }) {
   return (
@@ -46,7 +55,7 @@ function StepIndicator({ current }) {
             </div>
             {i < STEPS.length - 1 && (
               <div
-                className={`h-px w-10 sm:w-16 mx-1 mb-5 transition-colors
+                className={`h-px w-8 sm:w-12 mx-1 mb-5 transition-colors
                   ${i < current ? 'bg-[#3fb950]/50' : 'bg-[#30363d]'}`}
               />
             )}
@@ -93,6 +102,114 @@ function Select({ label, value, onChange, options, required }) {
           </option>
         ))}
       </select>
+    </div>
+  )
+}
+
+// Per-agent prompt textarea with collapse/expand
+function AgentPrompt({ value, onChange }) {
+  const [expanded, setExpanded] = useState(false)
+  const preview = value
+    ? value.split('\n').slice(0, 2).join('\n') + (value.split('\n').length > 2 ? '\n…' : '')
+    : ''
+
+  return (
+    <div className="col-span-2 mt-1">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm text-[#8b949e] font-medium">Prompt</span>
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs text-[#8b949e] hover:text-white transition-colors"
+        >
+          {expanded ? '▲ Collapse' : '▼ Expand'}
+        </button>
+      </div>
+      {expanded ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Optional: system prompt / role instructions for this agent…"
+          rows={4}
+          className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-sm text-[#e6edf3] placeholder-[#8b949e]/50 focus:outline-none focus:border-[#3fb950] transition-colors font-mono resize-y"
+        />
+      ) : (
+        <div
+          onClick={() => setExpanded(true)}
+          className="cursor-pointer bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-sm font-mono text-[#8b949e] min-h-[36px] hover:border-[#8b949e] transition-colors whitespace-pre-line"
+        >
+          {preview || <span className="italic text-[#8b949e]/50">No prompt — click to add</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Step 0: Template selection grid
+function Step0({ templates, selectedId, onSelect, loading }) {
+  const all = [...templates, CUSTOM_TEMPLATE]
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h2 className="text-xl font-semibold text-white mb-1">Start from a template</h2>
+        <p className="text-sm text-[#8b949e]">
+          Choose a preset to pre-fill the wizard, or start from scratch.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-[#8b949e]">
+          <span className="w-3 h-3 rounded-full bg-[#3fb950] animate-pulse" />
+          Loading templates…
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {all.map((t) => {
+            const selected = selectedId === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onSelect(t)}
+                className={`flex flex-col items-start gap-1.5 px-4 py-3 rounded-lg border text-left transition-colors
+                  ${selected
+                    ? 'border-[#3fb950] bg-[#3fb950]/5'
+                    : 'border-[#30363d] hover:border-[#8b949e]'
+                  }`}
+              >
+                <div className="flex items-center gap-2 w-full">
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0
+                      ${selected ? 'border-[#3fb950]' : 'border-[#8b949e]'}`}
+                  >
+                    {selected && <div className="w-2 h-2 rounded-full bg-[#3fb950]" />}
+                  </div>
+                  <span className="text-sm font-semibold text-[#e6edf3]">{t.name}</span>
+                  {t.tags?.includes('recommended') && (
+                    <span className="ml-auto text-[10px] font-mono text-[#3fb950] border border-[#3fb950]/40 rounded px-1.5 py-0.5">
+                      recommended
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[#8b949e] pl-6">{t.description}</p>
+                {t.agents && t.id !== 'custom' && (
+                  <div className="pl-6 flex flex-wrap gap-1 mt-0.5">
+                    {t.agents.map((a, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] font-mono bg-[#161b22] border border-[#30363d] rounded px-1.5 py-0.5 text-[#8b949e]"
+                      >
+                        {a.role}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -166,10 +283,10 @@ function Step2({ runtime, setRuntime }) {
   )
 }
 
-// Step 3: Add agents
+// Step 3: Add agents (free-text role with datalist, per-agent prompt)
 function Step3({ agents, setAgents, error }) {
   function addAgent() {
-    setAgents([...agents, { role: 'dev', model: '' }])
+    setAgents([...agents, { role: 'dev', model: 'sonnet', prompt: '' }])
   }
 
   function removeAgent(i) {
@@ -177,7 +294,7 @@ function Step3({ agents, setAgents, error }) {
   }
 
   function updateAgent(i, field, value) {
-    setAgents(agents.map((a, idx) => idx === i ? { ...a, [field]: value } : a))
+    setAgents(agents.map((a, idx) => (idx === i ? { ...a, [field]: value } : a)))
   }
 
   return (
@@ -203,18 +320,36 @@ function Step3({ agents, setAgents, error }) {
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Select
-                label="Role"
-                value={agent.role}
-                onChange={(v) => updateAgent(i, 'role', v)}
-                options={ROLES.map((r) => ({ value: r, label: r }))}
-                required
-              />
+              {/* Role: free-text with datalist suggestions */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm text-[#8b949e] font-medium">
+                  Role <span className="text-[#3fb950]">*</span>
+                </label>
+                <input
+                  type="text"
+                  list={`role-suggestions-${i}`}
+                  value={agent.role}
+                  onChange={(e) => updateAgent(i, 'role', e.target.value)}
+                  placeholder="e.g. dev, lead, reviewer…"
+                  className="bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-sm text-[#e6edf3] placeholder-[#8b949e]/50 focus:outline-none focus:border-[#3fb950] transition-colors"
+                />
+                <datalist id={`role-suggestions-${i}`}>
+                  {ROLES.map((r) => (
+                    <option key={r} value={r} />
+                  ))}
+                </datalist>
+              </div>
+
               <Select
                 label="Model"
                 value={agent.model}
                 onChange={(v) => updateAgent(i, 'model', v)}
                 options={MODELS.map((m) => ({ value: m.id, label: m.label }))}
+              />
+
+              <AgentPrompt
+                value={agent.prompt ?? ''}
+                onChange={(v) => updateAgent(i, 'prompt', v)}
               />
             </div>
           </div>
@@ -284,7 +419,7 @@ function Step4({ runtime, apiKey, setApiKey, error }) {
 }
 
 // Step 5: Review + Launch
-function Step5({ name, repoUrl, runtime, agents, loading }) {
+function Step5({ name, repoUrl, runtime, agents, templateName, loading }) {
   const runtimeLabel = RUNTIMES.find((r) => r.id === runtime)?.label ?? runtime
 
   return (
@@ -295,6 +430,12 @@ function Step5({ name, repoUrl, runtime, agents, loading }) {
       </div>
 
       <div className="bg-[#0d1117] border border-[#30363d] rounded-lg divide-y divide-[#30363d]">
+        {templateName && (
+          <div className="flex justify-between px-4 py-3">
+            <span className="text-xs text-[#8b949e] font-mono">Template</span>
+            <span className="text-sm text-[#e6edf3]">{templateName}</span>
+          </div>
+        )}
         <div className="flex justify-between px-4 py-3">
           <span className="text-xs text-[#8b949e] font-mono">Team</span>
           <span className="text-sm text-[#e6edf3] font-medium">{name}</span>
@@ -315,12 +456,31 @@ function Step5({ name, repoUrl, runtime, agents, loading }) {
           <span className="text-xs text-[#8b949e] font-mono block mb-2">Agent roles</span>
           <div className="flex flex-wrap gap-2">
             {agents.map((a, i) => (
-              <span key={i} className="text-xs font-mono bg-[#161b22] border border-[#30363d] rounded px-2 py-1 text-[#3fb950]">
+              <span
+                key={i}
+                className="text-xs font-mono bg-[#161b22] border border-[#30363d] rounded px-2 py-1 text-[#3fb950]"
+              >
                 {a.role}{a.model ? ` · ${a.model}` : ''}
               </span>
             ))}
           </div>
         </div>
+        {agents.some((a) => a.prompt) && (
+          <div className="px-4 py-3">
+            <span className="text-xs text-[#8b949e] font-mono block mb-2">Agent prompts</span>
+            <div className="flex flex-col gap-2">
+              {agents.map((a, i) =>
+                a.prompt ? (
+                  <div key={i} className="text-xs font-mono text-[#8b949e] bg-[#161b22] border border-[#30363d] rounded px-2 py-1.5">
+                    <span className="text-[#3fb950] mr-1">{a.role}:</span>
+                    {a.prompt.split('\n').slice(0, 2).join(' ').slice(0, 80)}
+                    {(a.prompt.length > 80 || a.prompt.split('\n').length > 2) ? '…' : ''}
+                  </div>
+                ) : null
+              )}
+            </div>
+          </div>
+        )}
         <div className="flex justify-between px-4 py-3">
           <span className="text-xs text-[#8b949e] font-mono">API key</span>
           <span className="text-sm text-[#e6edf3] font-mono">••••••••</span>
@@ -341,27 +501,57 @@ export default function NewTeamPage() {
   const router = useRouter()
   const [step, setStep] = useState(0)
 
+  // Template state
+  const [templates, setTemplates] = useState([])
+  const [templatesLoading, setTemplatesLoading] = useState(true)
+  const [selectedTemplateId, setSelectedTemplateId] = useState('custom')
+  const [selectedTemplateName, setSelectedTemplateName] = useState(null)
+
   // Form state
   const [name, setName] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
   const [runtime, setRuntime] = useState('claude-code')
-  const [agents, setAgents] = useState([{ role: 'dev', model: '' }])
+  const [agents, setAgents] = useState([{ role: 'dev', model: 'sonnet', prompt: '' }])
   const [apiKey, setApiKey] = useState('')
 
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
+  // Fetch templates on mount; fallback to empty list if API not ready
+  useEffect(() => {
+    fetch('/api/templates')
+      .then((r) => (r.ok ? r.json() : { templates: [] }))
+      .then(({ templates: list }) => setTemplates(list ?? []))
+      .catch(() => {})
+      .finally(() => setTemplatesLoading(false))
+  }, [])
+
+  function applyTemplate(t) {
+    setSelectedTemplateId(t.id)
+    setSelectedTemplateName(t.id === 'custom' ? null : t.name)
+    if (t.id !== 'custom') {
+      setRuntime(t.runtime ?? 'claude-code')
+      setAgents(
+        (t.agents ?? []).map((a) => ({
+          role: a.role ?? 'dev',
+          model: a.model ?? 'sonnet',
+          prompt: a.prompt ?? '',
+        }))
+      )
+    }
+  }
+
   function validate() {
     setError(null)
-    if (step === 0) {
+    if (step === 1) {
       if (!name.trim()) return setError('Team name is required') || false
       if (!repoUrl.trim()) return setError('Repository URL is required') || false
       try { new URL(repoUrl.trim()) } catch { return setError('Enter a valid URL') || false }
     }
-    if (step === 2) {
+    if (step === 3) {
       if (agents.length === 0) return setError('Add at least one agent') || false
     }
-    if (step === 3) {
+    if (step === 4) {
       if (!apiKey.trim()) return setError('API key is required') || false
     }
     return true
@@ -388,11 +578,13 @@ export default function NewTeamPage() {
         role: a.role,
         runtime,
         ...(a.model ? { model: a.model } : {}),
+        ...(a.prompt ? { prompt: a.prompt } : {}),
       })),
       auth: {
         mode: 'api-key',
         apiKey: apiKey.trim(),
       },
+      ...(selectedTemplateId !== 'custom' ? { template: selectedTemplateId } : {}),
     }
 
     try {
@@ -405,7 +597,6 @@ export default function NewTeamPage() {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error ?? `Server error ${res.status}`)
       }
-      const team = await res.json()
       router.push('/dashboard')
     } catch (err) {
       setError(err.message)
@@ -427,6 +618,14 @@ export default function NewTeamPage() {
 
         <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 mb-6">
           {step === 0 && (
+            <Step0
+              templates={templates}
+              selectedId={selectedTemplateId}
+              onSelect={applyTemplate}
+              loading={templatesLoading}
+            />
+          )}
+          {step === 1 && (
             <Step1
               name={name}
               setName={setName}
@@ -435,13 +634,13 @@ export default function NewTeamPage() {
               error={error}
             />
           )}
-          {step === 1 && (
+          {step === 2 && (
             <Step2 runtime={runtime} setRuntime={setRuntime} />
           )}
-          {step === 2 && (
+          {step === 3 && (
             <Step3 agents={agents} setAgents={setAgents} error={error} />
           )}
-          {step === 3 && (
+          {step === 4 && (
             <Step4
               runtime={runtime}
               apiKey={apiKey}
@@ -449,12 +648,13 @@ export default function NewTeamPage() {
               error={error}
             />
           )}
-          {step === 4 && (
+          {step === 5 && (
             <Step5
               name={name}
               repoUrl={repoUrl}
               runtime={runtime}
               agents={agents}
+              templateName={selectedTemplateName}
               loading={loading}
             />
           )}
@@ -498,7 +698,7 @@ export default function NewTeamPage() {
         </div>
 
         {/* Launch error (shown below nav) */}
-        {step === 4 && error && !loading && (
+        {step === 5 && error && !loading && (
           <p className="text-sm text-red-400 mt-4 text-center">{error}</p>
         )}
       </div>
