@@ -54,9 +54,18 @@ TEAM_ID=""
 COMPOSE_FILE=""
 MANAGER_PID=""
 SMOKE_API_KEY="smoke-test-key-$(date +%s)"
-MANAGER_PORT=18080   # non-default port to avoid conflict with any running Manager
+MANAGER_PORT=8080
 
 cleanup() {
+  # Tear down containers if still up (handles early-exit / signal cases)
+  if [[ -n "$TEAM_ID" ]] && [[ -n "$COMPOSE_FILE" ]] && [[ -f "$COMPOSE_FILE" ]]; then
+    # Best-effort API delete so Manager cleans up its state
+    curl -s -o /dev/null -X DELETE \
+      -H "Authorization: Bearer $SMOKE_API_KEY" \
+      "http://localhost:$MANAGER_PORT/api/teams/$TEAM_ID" 2>/dev/null || true
+    # Force-down containers regardless (covers Manager-unaware orphans)
+    docker compose -f "$COMPOSE_FILE" down --timeout 10 2>/dev/null || true
+  fi
   if [[ -n "$MANAGER_PID" ]] && kill -0 "$MANAGER_PID" 2>/dev/null; then
     kill "$MANAGER_PID" 2>/dev/null || true
     wait "$MANAGER_PID" 2>/dev/null || true
@@ -77,7 +86,7 @@ fi
 echo
 echo -e "${CYAN}═══ Step 2: create-team ═══${RESET}"
 
-# Start Manager on a test port so create-team can register via API
+# Start Manager on port 8080 (default) so agent containers can reach it
 info "Starting Manager on port $MANAGER_PORT…"
 node "$ROOT/manager/src/index.js" serve --port "$MANAGER_PORT" 2>/dev/null &
 MANAGER_PID=$!
