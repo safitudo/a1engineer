@@ -178,3 +178,60 @@ test.describe('AgentConsole — console container', () => {
     await expect(page.getByText('live')).not.toBeVisible()
   })
 })
+
+test.describe('AgentConsole — console header content', () => {
+  test('console header shows the agentId of the selected agent', async ({ page }) => {
+    await gotoTeamDetail(page)
+
+    await page.getByText('agent-dev').click()
+
+    // The console wrapper header should contain the agentId text
+    const consoleWrapper = page.locator('.bg-\\[\\#010409\\].border.border-\\[\\#30363d\\].rounded-lg')
+    await expect(consoleWrapper).toBeVisible()
+    await expect(consoleWrapper.getByText('agent-dev')).toBeVisible()
+  })
+
+  test('console header updates agentId when switching agents', async ({ page }) => {
+    await gotoTeamDetail(page)
+
+    // Open agent-dev console
+    await page.getByText('agent-dev').click()
+    const consoleWrapper = page.locator('.bg-\\[\\#010409\\].border.border-\\[\\#30363d\\].rounded-lg')
+    await expect(consoleWrapper.getByText('agent-dev')).toBeVisible()
+
+    // Switch to agent-arch — console header should update
+    await page.getByText('agent-arch').click()
+    await expect(consoleWrapper.getByText('agent-arch')).toBeVisible()
+    await expect(consoleWrapper.getByText('agent-dev')).not.toBeVisible()
+  })
+})
+
+test.describe('AgentConsole — WS error handling', () => {
+  test('console container renders when ws-token fetch fails', async ({ page }) => {
+    await authenticate(page)
+    await page.route(`/api/teams/${TEAM_ID}`, route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(SAMPLE_TEAM),
+      })
+    )
+    // Return 500 from ws-token — TeamWSProvider should degrade gracefully
+    await page.route('/api/auth/ws-token', route =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'internal' }),
+      })
+    )
+
+    await page.goto(`/dashboard/teams/${TEAM_ID}`)
+    await page.waitForLoadState('networkidle')
+
+    // Open a console — the wrapper and live badge should still render
+    await page.getByText('agent-dev').click()
+    const consoleWrapper = page.locator('.bg-\\[\\#010409\\].border.border-\\[\\#30363d\\].rounded-lg')
+    await expect(consoleWrapper).toBeVisible()
+    await expect(page.getByText('live')).toBeVisible()
+  })
+})
