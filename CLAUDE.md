@@ -110,68 +110,61 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 
 **Web UI (Next.js — `web/`)**
 - **Dashboard** (`web/app/dashboard/page.js`) — Team cards grid, dark theme (#0d1117 bg, #3fb950 accent)
-- **Create Team Wizard** (`web/app/dashboard/teams/new/page.js`) — 5-step form: team name+repo, runtime select, agents, API key, review+launch
+- **Create Team Wizard** (`web/app/dashboard/teams/new/page.js`) — 5-step form + optional channels input. Channels parsed in launch handler
 - **Sidebar Layout** (`web/app/dashboard/layout.js`) — Navigation layout wrapping dashboard pages
-- **IrcFeed Component** (`web/components/IrcFeed.js`) — WebSocket IRC feed, connects directly to Manager:8080/ws (not through Next.js proxy). MAX_MESSAGES=500
-- **Team Detail Page** (`web/app/dashboard/teams/[id]/page.js`) — Uses IrcFeed component, correct WS URL
+- **IrcFeed Component** (`web/components/IrcFeed.js`) — WebSocket IRC feed, connects directly to Manager:8080/ws. MAX_MESSAGES=500
+- **Team Detail Page** (`web/app/dashboard/teams/[id]/page.js`) — Uses IrcFeed, AgentConsole, IrcConnectionInfo. Channels from team.channels (configurable)
 - **AgentConsole Component** (`web/components/AgentConsole.js`) — Phase 3 interactive terminal via xterm.js + WS console protocol. Uses TeamWSProvider shared context
 - **TeamWSProvider** (`web/components/TeamWSProvider.js`) — Shared authenticated WS context for IrcFeed + AgentConsole. Exponential backoff reconnect, opaque token auth
 - **Login Page** (`web/app/login/page.js`) — Paste API key → set httpOnly cookie → redirect to dashboard
-- **Route Handler Proxy** (`web/app/api/[...path]/route.js`) — Replaces Next.js rewrites. Reads cookie, injects Authorization: Bearer header, forwards to Manager
+- **Route Handler Proxy** (`web/app/api/[...path]/route.js`) — Reads cookie, injects Authorization: Bearer header, forwards to Manager
 - **Edge Middleware** (`web/middleware.js`) — Redirects unauthenticated /dashboard/* requests to /login
 
 **Manager API (Express — `manager/`)**
-- **IRC Gateway Lifecycle** (`manager/src/index.js`) — createGateway/destroyGateway wired into team start/stop
-- **TEAMS_DIR Constant** (`manager/src/constants.js`) — Extracted from 4 duplicated locations
-- **Tenant Auth Middleware** (`manager/src/middleware/auth.js`) — Bearer token auth on all /api/teams routes, BYOK auto-provisioning via upsertTenant, heartbeat endpoint exempt
-- **Tenant Store** (`manager/src/store/tenants.js`) — In-memory Map, same pattern as teams.js
-- **Auth Endpoints** (`manager/src/api/auth.js`) — POST /api/auth/login validates Bearer token
-- **WebSocket Auth** — First-message auth protocol (opaque token or API key). validateWsToken for single-use tokens, findByApiKey fallback
-- **WS Opaque Token** (`manager/src/api/auth.js`) — POST /api/auth/ws-token generates single-use 60s TTL tokens (randomBytes(32)), prevents API key exposure to client JS. Periodic sweep cleans expired unclaimed tokens
-- **WS Tenant Scoping** (`manager/src/api/ws.js`) — subscribe + console.attach reject null-tenantId teams and cross-tenant access. tenantId preserved through rehydration (sha256 is deterministic)
-- **IRC Channel Send** — POST /channels/:name/messages now works (was 501 stub), uses IrcGateway.say()
-- **Team Store Rehydration** — Writes team-meta.json on create, scans TEAMS_DIR on startup to rebuild store. POST /api/teams/rehydrate endpoint. Preserves tenantId
+- **Configurable Channels** — `DEFAULT_CHANNELS` exported from teams.js as single source of truth. Schema validated in team-config.schema.json. Stored per-team, passed to IRC gateway, exposed via API
+- **IRC Gateway** (`manager/src/irc/gateway.js`) — Per-team IRC client with configurable channels, reconnection with exponential backoff
+- **IRC Router** (`manager/src/irc/router.js`) — Per-team per-channel ring buffers (500 max), WS broadcast, structured tag parsing
+- **Tenant Auth Middleware** (`manager/src/middleware/auth.js`) — Bearer token auth, BYOK auto-provisioning via upsertTenant
+- **WebSocket Auth** — First-message auth protocol (opaque token or API key). Single-use 60s TTL tokens with periodic sweep
+- **WS Tenant Scoping** — subscribe + console.attach reject cross-tenant access
+- **Team Store Rehydration** — team-meta.json on create, TEAMS_DIR scan on startup. Backfills internalToken + channels
 - **Signup Flow** — POST /api/auth/signup with randomUUID tenant + hashed key storage
-- **E2E Agent Harness** (`manager/src/e2e/agent-harness.test.js`) — node:test-based, 5 scenarios covering team lifecycle
 
 **Tests**
-- 143 unit/integration tests passing (9 test files)
-- Playwright E2E: login, dashboard, wizard, team-detail (13 tests)
-- E2E agent harness (node:test, separate from vitest — excluded via vitest.config.js)
-- Test mocks for IRC gateway and router (prevent real TCP connections)
-- WS auth handshake + opaque token + tenant scoping coverage
+- 143+ unit/integration tests passing (9 test files)
+- Playwright E2E: login, dashboard, wizard, team-detail, agent-console
+- E2E agent harness (node:test, separate from vitest)
+- Channel API tests (GET channels, GET/POST messages, custom channels)
 
 ### Architecture Decisions
 - **BYOK (Bring Your Own Key)** — Users provide their own API keys, no managed billing
-- **Agent-agnostic** — Claude first, but architecture supports adding other providers
 - **Multi-tenant isolation** — API key → tenantId mapping, teams scoped to tenant
 - **Next.js rewrites DON'T proxy WebSocket** — IrcFeed connects directly to Manager:8080
-- **Next.js rewrites DON'T forward custom headers** — Route handler proxy pattern used instead
 - **Design tokens** — #0d1117 bg, #161b22 card, #3fb950 accent (GitHub dark theme)
+
+### Self-Hosting Milestone — COMPLETE (15/15, b21cf15)
+
+PRs merged this sprint: #122, #124, #123, #126, #127, #129, #130, #131, #132, #133
 
 ### What's Remaining (Priority Order)
 
-**P0 — DONE** ~~#61 Team store rehydration~~ — Merged. team-meta.json written on create, TEAMS_DIR scanned on startup.
-**P1 — DONE** ~~#62 Tenant ID collision~~ — Fixed via sha256(fullApiKey). ~~#63 WS auth bypass~~ — Fixed: findByApiKey rejects unknown keys. ~~#64 API key in WS URL~~ — Fixed: first-message auth protocol.
-
-**P2 — DONE** ~~Phase 3 AgentConsole~~ — Backend (WS handlers), Frontend (xterm.js), TeamWSProvider (shared context), WS opaque token all merged.
-
-**P3 — DONE** ~~#97 AgentConsole listeners~~ — Merged PR #100. ~~#95 wsTokenStore sweep~~ — Merged PR #101. ~~#99 WS tenant scoping~~ — Merged PR #103. ~~#98 Team-detail E2E~~ — Merged PR #102.
-
-**P4 — Next**
-1. **More E2E test suites** — Priority from Stanislav. Expand coverage.
-2. **Configurable team roles + team templates** — Priority from Stanislav.
-3. **PR #50 PostgreSQL store** — Blocked: tests need async update. Parked.
+**P6 — Next Sprint**
+1. **Custom Template CRUD Frontend** — /dashboard/templates page with list + create/edit form. Backend endpoints already exist
+2. **E2E Test Expansion** — Settings page, wizard with custom channels, template flows
+3. **CI Workflow** — Dev-4 blocked on GitHub App 'Workflows: Read and write' permission
+4. **Persistent Tenant Store** — SQLite/Postgres migration (PR #50 parked, tests need async)
 
 ### Current Assignments
-| Agent | Issue | Task | Status |
-|-------|-------|------|--------|
-| arch | — | Architecture, reviewing | Available |
-| dev-3 | — | Available | — |
-| dev-4 | — | Available | — |
-| dev-5 | — | Available | — |
-| critic-7 | — | Reviewing PRs | Monitoring |
-| qa-6 | — | Testing, monitoring | Monitoring |
+| Agent | Task | Status |
+|-------|------|--------|
+| arch | Architecture, reviewing | Available |
+| dev-3 | Custom Template CRUD | Assigned |
+| dev-4 | CI Workflow | BLOCKED on GH App Workflows permission |
+| dev-5 | E2E Test Expansion | Assigned |
+| critic-7 | Reviewing PRs | Monitoring |
+| qa-6 | Testing, monitoring | Monitoring |
 
 ### Known Issues
+- GITHUB_TOKEN expired — all agents blocked from pushing/creating PRs
+- GitHub App needs 'Workflows: Read and write' permission for CI workflow pushes
 - PR #50 (PostgreSQL) blocked — tests use sync API but store is async
