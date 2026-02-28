@@ -275,17 +275,33 @@ export default function TeamDetailPage() {
       })
   }, [id])
 
-  // ── Stop team ───────────────────────────────────────────────────────────────
+  // ── Stop team (non-destructive) ─────────────────────────────────────────────
   async function stopTeam() {
-    if (!confirm(`Stop team "${team?.name}"? This will terminate all agents.`)) return
+    if (!confirm(`Stop team "${team?.name}"? This will stop all agents but keep the team config.`)) return
     setStopping(true)
     try {
-      const res = await fetch(`/api/teams/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/teams/${id}/stop`, { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      router.push('/dashboard')
+      setTeam(prev => ({ ...prev, status: 'stopped' }))
     } catch (err) {
       alert(`Failed to stop team: ${err.message}`)
+    } finally {
       setStopping(false)
+    }
+  }
+
+  // ── Start team ─────────────────────────────────────────────────────────────
+  const [starting, setStarting] = useState(false)
+  async function startTeam() {
+    setStarting(true)
+    try {
+      const res = await fetch(`/api/teams/${id}/start`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setTeam(prev => ({ ...prev, status: 'running' }))
+    } catch (err) {
+      alert(`Failed to start team: ${err.message}`)
+    } finally {
+      setStarting(false)
     }
   }
 
@@ -335,13 +351,23 @@ export default function TeamDetailPage() {
             >
               ⚙ Settings
             </Link>
-            <button
-              onClick={stopTeam}
-              disabled={stopping || team?.status === 'stopped'}
-              className="text-sm text-[#f85149] hover:text-white border border-[#f85149]/40 hover:border-[#f85149] hover:bg-[#f85149]/10 px-3 py-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {stopping ? 'Stopping…' : 'Stop Team'}
-            </button>
+            {team?.status === 'stopped' ? (
+              <button
+                onClick={startTeam}
+                disabled={starting}
+                className="text-sm text-[#3fb950] hover:text-white border border-[#3fb950]/40 hover:border-[#3fb950] hover:bg-[#3fb950]/10 px-3 py-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {starting ? 'Starting…' : 'Start Team'}
+              </button>
+            ) : (
+              <button
+                onClick={stopTeam}
+                disabled={stopping}
+                className="text-sm text-[#f85149] hover:text-white border border-[#f85149]/40 hover:border-[#f85149] hover:bg-[#f85149]/10 px-3 py-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {stopping ? 'Stopping…' : 'Stop Team'}
+              </button>
+            )}
           </div>
         </div>
       </div>

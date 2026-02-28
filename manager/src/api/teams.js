@@ -204,6 +204,44 @@ router.post('/rehydrate', async (req, res) => {
   }
 })
 
+// POST /api/teams/:id/stop — non-destructive stop (keeps team in store)
+router.post('/:id/stop', requireTeam, async (req, res) => {
+  const { team } = req
+  if (team.status === 'stopped') {
+    return res.status(409).json({ error: 'team is already stopped', code: 'ALREADY_STOPPED' })
+  }
+
+  destroyGateway(req.params.id)
+  try {
+    await stopTeam(req.params.id)
+  } catch (err) {
+    console.error('[api/teams] stopTeam failed:', err)
+  }
+  teamStore.updateTeam(req.params.id, { status: 'stopped' })
+  res.json({ ok: true, status: 'stopped' })
+})
+
+// POST /api/teams/:id/start — restart a stopped team
+router.post('/:id/start', requireTeam, async (req, res) => {
+  const { team } = req
+  if (team.status !== 'stopped') {
+    return res.status(409).json({ error: 'team is not stopped', code: 'NOT_STOPPED' })
+  }
+
+  try {
+    await startTeam(team, { apiKey: team.auth?.apiKey })
+    teamStore.updateTeam(req.params.id, { status: 'running' })
+    createGateway(teamStore.getTeam(req.params.id), { onMessage: routeMessage })
+    const tokenRefresh = req.app.get('tokenRefresh')
+    if (tokenRefresh?.refreshNow) tokenRefresh.refreshNow()
+    res.json({ ok: true, status: 'running' })
+  } catch (err) {
+    console.error('[api/teams] startTeam failed:', err)
+    teamStore.updateTeam(req.params.id, { status: 'error' })
+    res.status(500).json({ error: 'failed to start team', code: 'COMPOSE_ERROR' })
+  }
+})
+
 // DELETE /api/teams/:id — teardown compose stack + remove from store
 router.delete('/:id', requireTeam, async (req, res) => {
   destroyGateway(req.params.id)

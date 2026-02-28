@@ -681,6 +681,69 @@ describe('GET /api/teams/:id/logs', () => {
   })
 })
 
+// ── POST /api/teams/:id/stop ──────────────────────────────────────────────────
+
+describe('POST /api/teams/:id/stop', () => {
+  it('stops a running team and returns status stopped', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+
+    const res = await post(port, `/api/teams/${teamId}/stop`)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, status: 'stopped' })
+
+    // Verify team is now stopped
+    const detail = await get(port, `/api/teams/${teamId}`)
+    expect(detail.body.status).toBe('stopped')
+  })
+
+  it('returns 409 if team is already stopped', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+
+    await post(port, `/api/teams/${teamId}/stop`)
+    const res = await post(port, `/api/teams/${teamId}/stop`)
+    expect(res.status).toBe(409)
+    expect(res.body.code).toBe('ALREADY_STOPPED')
+  })
+
+  it('returns 404 for non-existent team', async () => {
+    const res = await post(port, '/api/teams/no-such-team/stop')
+    expect(res.status).toBe(404)
+  })
+})
+
+// ── POST /api/teams/:id/start ─────────────────────────────────────────────────
+
+describe('POST /api/teams/:id/start', () => {
+  it('restarts a stopped team and returns status running', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+
+    await post(port, `/api/teams/${teamId}/stop`)
+    const res = await post(port, `/api/teams/${teamId}/start`)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, status: 'running' })
+
+    const detail = await get(port, `/api/teams/${teamId}`)
+    expect(detail.body.status).toBe('running')
+  })
+
+  it('returns 409 if team is not stopped', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+
+    const res = await post(port, `/api/teams/${teamId}/start`)
+    expect(res.status).toBe(409)
+    expect(res.body.code).toBe('NOT_STOPPED')
+  })
+
+  it('returns 404 for non-existent team', async () => {
+    const res = await post(port, '/api/teams/no-such-team/start')
+    expect(res.status).toBe(404)
+  })
+})
+
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
 
 describe('catch-all', () => {

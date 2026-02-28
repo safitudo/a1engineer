@@ -336,34 +336,94 @@ function AgentsSection({ team, onSaved }) {
 
 // ── Danger zone ────────────────────────────────────────────────────────────────
 
-function DangerZone({ team }) {
+function DangerZone({ team, onTeamUpdated }) {
   const router = useRouter()
   const [stopping, setStopping] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   async function stopTeam() {
-    if (!confirm(`Stop team "${team.name}"? This will terminate all agents.`)) return
+    if (!confirm(`Stop team "${team.name}"? This will stop all agents but keep the team config.`)) return
     setStopping(true)
+    try {
+      const res = await fetch(`/api/teams/${team.id}/stop`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      onTeamUpdated?.({ ...team, status: 'stopped' })
+    } catch (err) {
+      alert(`Failed to stop team: ${err.message}`)
+    } finally {
+      setStopping(false)
+    }
+  }
+
+  async function startTeam() {
+    setStarting(true)
+    try {
+      const res = await fetch(`/api/teams/${team.id}/start`, { method: 'POST' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      onTeamUpdated?.({ ...team, status: 'running' })
+    } catch (err) {
+      alert(`Failed to start team: ${err.message}`)
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  async function deleteTeam() {
+    if (!confirm(`DELETE team "${team.name}"? This will permanently remove all data. This cannot be undone.`)) return
+    setDeleting(true)
     try {
       const res = await fetch(`/api/teams/${team.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       router.push('/dashboard')
     } catch (err) {
-      alert(`Failed to stop team: ${err.message}`)
-      setStopping(false)
+      alert(`Failed to delete team: ${err.message}`)
+      setDeleting(false)
     }
   }
 
   return (
     <div className="bg-[#161b22] border border-[#f85149]/30 rounded-xl p-6">
       <h2 className="text-sm font-semibold text-[#f85149] font-mono mb-1 uppercase tracking-wider">Danger Zone</h2>
-      <p className="text-xs text-[#8b949e] mb-4">Stopping the team terminates all agent containers. This cannot be undone.</p>
-      <button
-        onClick={stopTeam}
-        disabled={stopping || team.status === 'stopped'}
-        className="px-4 py-2 text-sm font-mono rounded-md border border-[#f85149]/40 text-[#f85149] hover:bg-[#f85149]/10 hover:border-[#f85149] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {stopping ? 'Stopping…' : 'Stop Team'}
-      </button>
+      <div className="flex flex-col gap-4 mt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-[#e6edf3] font-mono">Stop / Start Team</div>
+            <div className="text-xs text-[#8b949e] mt-0.5">Stop all agent containers. Team config is preserved and can be restarted.</div>
+          </div>
+          {team.status === 'stopped' ? (
+            <button
+              onClick={startTeam}
+              disabled={starting}
+              className="px-4 py-2 text-sm font-mono rounded-md border border-[#3fb950]/40 text-[#3fb950] hover:bg-[#3fb950]/10 hover:border-[#3fb950] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              {starting ? 'Starting…' : 'Start Team'}
+            </button>
+          ) : (
+            <button
+              onClick={stopTeam}
+              disabled={stopping}
+              className="px-4 py-2 text-sm font-mono rounded-md border border-[#d29922]/40 text-[#d29922] hover:bg-[#d29922]/10 hover:border-[#d29922] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              {stopping ? 'Stopping…' : 'Stop Team'}
+            </button>
+          )}
+        </div>
+        <div className="border-t border-[#f85149]/20" />
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-[#e6edf3] font-mono">Delete Team</div>
+            <div className="text-xs text-[#8b949e] mt-0.5">Permanently remove team, all agents, and configuration. This cannot be undone.</div>
+          </div>
+          <button
+            onClick={deleteTeam}
+            disabled={deleting}
+            className="px-4 py-2 text-sm font-mono rounded-md border border-[#f85149]/40 text-[#f85149] hover:bg-[#f85149]/10 hover:border-[#f85149] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          >
+            {deleting ? 'Deleting…' : 'Delete Team'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -435,7 +495,7 @@ export default function TeamSettingsPage() {
           <GeneralSection team={team} onSaved={setTeam} />
           <AgentsSection team={team} onSaved={setTeam} />
           <ChannelsSection team={team} onSaved={setTeam} />
-          <DangerZone team={team} />
+          <DangerZone team={team} onTeamUpdated={setTeam} />
         </div>
       </div>
     </div>
