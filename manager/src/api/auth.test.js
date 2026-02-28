@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest'
 import http from 'http'
 import { createApp } from './index.js'
+import { initDb, closeDb } from '../store/db.js'
 
 // Minimal express app via the real app factory — no IRC/Docker mocks needed
 // because auth routes are pure in-memory (no IRC, no Docker).
@@ -24,6 +25,9 @@ vi.mock('../irc/router.js', () => ({
 
 let server
 let port
+
+beforeAll(() => initDb(':memory:'))
+afterAll(() => closeDb())
 
 beforeAll(async () => {
   const app = createApp()

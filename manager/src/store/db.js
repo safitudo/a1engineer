@@ -19,6 +19,18 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_teams_internal_token ON teams(internal_token);
     `,
   },
+  {
+    name: '002_create_tenants',
+    sql: `
+      CREATE TABLE IF NOT EXISTS tenants (
+        id          TEXT PRIMARY KEY,
+        key_hash    TEXT UNIQUE NOT NULL,
+        name        TEXT,
+        email       TEXT,
+        created_at  TEXT NOT NULL
+      );
+    `,
+  },
 ]
 
 function runMigrations(db) {
