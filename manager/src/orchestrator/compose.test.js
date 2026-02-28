@@ -164,6 +164,38 @@ describe('renderCompose — invalid auth', () => {
   })
 })
 
+describe('renderCompose — agent env pass-through', () => {
+  it('renders CLAUDE_AUTOCOMPACT_PCT_OVERRIDE from agent.env into container environment', async () => {
+    const yaml = await renderCompose({
+      ...BASE_CONFIG,
+      agents: [{ ...BASE_CONFIG.agents[0], env: { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '50' } }],
+    })
+    expect(yaml).toContain('CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "50"')
+  })
+
+  it('renders value 80 for lead/arch roles when set in agent.env', async () => {
+    const yaml = await renderCompose({
+      ...BASE_CONFIG,
+      agents: [{ id: 'naples-lead', role: 'lead', model: 'claude-opus-4-6', runtime: 'claude-code', prompt: '', env: { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '80' } }],
+    })
+    expect(yaml).toContain('CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80"')
+  })
+
+  it('does not render CLAUDE_AUTOCOMPACT_PCT_OVERRIDE when agent.env is empty', async () => {
+    const yaml = await renderCompose({ ...BASE_CONFIG })
+    expect(yaml).not.toContain('CLAUDE_AUTOCOMPACT_PCT_OVERRIDE')
+  })
+
+  it('renders all extra env vars when agent has multiple env entries', async () => {
+    const yaml = await renderCompose({
+      ...BASE_CONFIG,
+      agents: [{ ...BASE_CONFIG.agents[0], env: { CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '50', CUSTOM_VAR: 'hello' } }],
+    })
+    expect(yaml).toContain('CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "50"')
+    expect(yaml).toContain('CUSTOM_VAR: "hello"')
+  })
+})
+
 // Regression test for #99: rehydrateTeams previously wiped tenantId to null
 // on every restart, making all restored teams unclaimed and inaccessible via WS.
 // The fix removes the `meta.tenantId = null` assignment so the persisted value
