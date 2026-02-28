@@ -150,6 +150,43 @@ describe('WebSocket first-message auth', () => {
   })
 })
 
+// ── subscribe tenant scoping tests ───────────────────────────────────────────
+
+// Regression tests for #99: the old guard in the subscribe handler short-
+// circuited when team.tenantId was falsy, allowing any authenticated client to
+// subscribe to unclaimed teams. The fix inverts the check so that a null
+// tenantId always returns NOT_FOUND.
+
+describe('WebSocket subscribe — tenant scoping', () => {
+  const TENANT = { id: 'scoping-tenant-1', apiKey: 'scoping-key-1' }
+
+  beforeEach(() => {
+    findByApiKey.mockReturnValue(TENANT)
+  })
+
+  async function authenticatedWs() {
+    const { ws } = await wsConnect()
+    const resp = await sendAndReceive(ws, { type: 'auth', token: TENANT.apiKey })
+    expect(resp.type).toBe('authenticated')
+    return ws
+  }
+
+  it('rejects subscribe to a team with tenantId=null (regression #99)', async () => {
+    // createTeam without a tenantId option defaults to null — simulates a
+    // rehydrated team before the tenantId-preservation fix, or any unclaimed team.
+    const team = createTeam({ name: 'unclaimed', agents: [] })
+    expect(team.tenantId).toBeNull()
+
+    const ws = await authenticatedWs()
+    const resp = await sendAndReceive(ws, { type: 'subscribe', teamId: team.id })
+    expect(resp.type).toBe('error')
+    expect(resp.code).toBe('NOT_FOUND')
+
+    deleteTeam(team.id)
+    ws.close()
+  })
+})
+
 // ── console.* handler tests ───────────────────────────────────────────────────
 
 describe('WebSocket console.* handlers', () => {

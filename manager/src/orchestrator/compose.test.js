@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderCompose } from './compose.js'
+import { renderCompose, rehydrateTeams } from './compose.js'
 
 // Mock fs/promises so tests don't touch the filesystem
 vi.mock('fs/promises', () => ({
@@ -7,9 +7,10 @@ vi.mock('fs/promises', () => ({
   mkdir: vi.fn(),
   writeFile: vi.fn(),
   access: vi.fn().mockResolvedValue(undefined),
+  readdir: vi.fn(),
 }))
 
-import { readFile, writeFile, access } from 'fs/promises'
+import { readFile, writeFile, access, readdir } from 'fs/promises'
 import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -160,5 +161,31 @@ describe('renderCompose — invalid auth', () => {
     await expect(
       renderCompose({ ...BASE_CONFIG, auth: { mode: 'magic-token' } })
     ).rejects.toThrow('Unknown auth mode: magic-token')
+  })
+})
+
+// Regression test for #99: rehydrateTeams previously wiped tenantId to null
+// on every restart, making all restored teams unclaimed and inaccessible via WS.
+// The fix removes the `meta.tenantId = null` assignment so the persisted value
+// from team-meta.json is preserved unchanged.
+describe('rehydrateTeams — tenantId preservation (regression #99)', () => {
+  it('preserves tenantId from team-meta.json and does not wipe it to null', async () => {
+    readdir.mockResolvedValue(['team-abc'])
+    readFile.mockResolvedValue(JSON.stringify({
+      id: 'team-abc',
+      tenantId: 'tenant-xyz',
+      name: 'test-team',
+      agents: [],
+      auth: null,
+      status: 'running',
+      createdAt: new Date().toISOString(),
+    }))
+
+    const restoreTeam = vi.fn()
+    await rehydrateTeams(restoreTeam)
+
+    expect(restoreTeam).toHaveBeenCalledOnce()
+    const restoredTeam = restoreTeam.mock.calls[0][0]
+    expect(restoredTeam.tenantId).toBe('tenant-xyz')
   })
 })
