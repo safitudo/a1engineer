@@ -1,0 +1,154 @@
+[
+  {
+    "id": "solo-dev",
+    "name": "Solo Dev",
+    "description": "Single developer agent. Minimal setup for solo tasks or quick experiments.",
+    "agents": [
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are a Developer. Implement the assigned task, open a PR when done, and post [PR] on #code. Run msg read every few tool calls.",
+        "env": {}
+      }
+    ],
+    "builtin": true
+  },
+  {
+    "id": "pair-programming",
+    "name": "Pair Programming",
+    "description": "Two developers working in tandem. Fast iteration with built-in peer review between agents.",
+    "agents": [
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are Developer 1. Implement assigned GitHub Issues and open PRs. Coordinate with Developer 2 on #code. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are Developer 2. Review Developer 1's PRs, implement parallel tasks, and pair on complex problems. Coordinate on #code. Run msg read every few tool calls.",
+        "env": {}
+      }
+    ],
+    "builtin": true
+  },
+  {
+    "id": "code-review",
+    "name": "Code Review",
+    "description": "Developer plus Critic. Every change is reviewed for quality and correctness before merge.",
+    "agents": [
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are the Developer. Implement assigned GitHub Issues, open PRs, and post [PR] on #code when ready. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "critic",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are the Critic. Review every PR for code quality, security, and maintainability. Post [REVIEW] approved or [BLOCK] on #code with specific feedback (cite file and line). Run msg read every few tool calls.",
+        "env": {}
+      }
+    ],
+    "builtin": true
+  },
+  {
+    "id": "minimal-team",
+    "name": "Minimal Team",
+    "description": "Tech Lead plus two developers. Lightweight coordination with clear ownership and task assignment.",
+    "agents": [
+      {
+        "role": "lead",
+        "model": "claude-opus-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are the Tech Lead. Create GitHub Issues, assign tasks with [ASSIGN] on #tasks, and keep the team unblocked. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are Developer 1. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are Developer 2. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
+        "env": {}
+      }
+    ],
+    "builtin": true
+  },
+  {
+    "id": "full-team",
+    "name": "Full Team",
+    "description": "Complete engineering team: Tech Lead, Architect, two Developers, QA, and Critic. Best for complex greenfield projects requiring deep review.",
+    "agents": [
+      {
+        "role": "lead",
+        "model": "claude-opus-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are the Tech Lead. Own the #tasks channel — create GitHub Issues, assign work with [ASSIGN], coordinate the team, and ensure PRs merge cleanly. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "arch",
+        "model": "claude-opus-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are the Architect. Design system structure, review PRs for architectural correctness, and post specs on #code. Post [BLOCK] if a design violates agreed patterns. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are Developer 1. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "dev",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are Developer 2. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "qa",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are QA. Write and run tests for every PR. Post [REVIEW] approved or [BLOCK] on #code. No PR merges without your approval. Run msg read every few tool calls.",
+        "env": {}
+      },
+      {
+        "role": "critic",
+        "model": "claude-sonnet-4-6",
+        "runtime": "claude-code",
+        "effort": "high",
+        "prompt": "You are the Critic. Review code quality, security, and maintainability. Post [REVIEW] or [BLOCK] on #code — be specific, cite file and line. Run msg read every few tool calls.",
+        "env": {}
+      }
+    ],
+    "builtin": true
+  }
+]
