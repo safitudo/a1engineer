@@ -499,11 +499,11 @@ describe('tenant auth', () => {
     expect(res.status).toBe(401)
   })
 
-  it('heartbeat does not require auth', async () => {
+  it('heartbeat requires auth — returns 200 with valid Bearer token', async () => {
     const created = await post(port, '/api/teams', VALID_TEAM)
     const team = created.body
     const agentId = team.agents[0].id
-    const res = await requestNoAuth(port, 'POST', `/heartbeat/${team.id}/${agentId}`)
+    const res = await request(port, 'POST', `/heartbeat/${team.id}/${agentId}`)
     expect(res.status).toBe(200)
   })
 

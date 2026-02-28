@@ -13,8 +13,11 @@ export function createApp() {
   const app = express()
   app.use(express.json())
 
-  // GET /github-token/:teamId — fresh GitHub token for agent git operations (no auth)
-  app.get('/github-token/:teamId', async (req, res) => {
+  // GET /github-token/:teamId — fresh GitHub token for agent git operations
+  app.get('/github-token/:teamId', requireAuth, async (req, res) => {
+    if (req.teamScope && req.params.teamId !== req.teamScope) {
+      return res.status(403).json({ error: 'forbidden', code: 'FORBIDDEN' })
+    }
     const team = getTeam(req.params.teamId)
     if (!team) return res.status(404).json({ error: 'team not found' })
     try {
@@ -27,8 +30,11 @@ export function createApp() {
     }
   })
 
-  // POST /heartbeat/:teamId/:agentId — keep-alive from agent containers (no auth)
-  app.post('/heartbeat/:teamId/:agentId', (req, res) => {
+  // POST /heartbeat/:teamId/:agentId — keep-alive from agent containers
+  app.post('/heartbeat/:teamId/:agentId', requireAuth, (req, res) => {
+    if (req.teamScope && req.params.teamId !== req.teamScope) {
+      return res.status(403).json({ error: 'forbidden', code: 'FORBIDDEN' })
+    }
     const { teamId, agentId } = req.params
     const team = getTeam(teamId)
     if (!team) {
