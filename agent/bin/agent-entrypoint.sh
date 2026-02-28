@@ -101,11 +101,22 @@ chmod 644 /tmp/agent-env.sh
 
 # ── Write runtime-specific launch script ────────────────────────────────────
 # Runs INSIDE tmux. Two modes:
-#   API key  → --print --continue loop (reads from /tmp/agent-inbox.txt)
-#   Session  → interactive TUI (nudges via paste-buffer + raw CR)
+#   Session  → interactive TUI (nudges via paste-buffer + raw CR)  [SESSION_AUTH=1]
+#   API key  → --print --continue loop (reads from /tmp/agent-inbox.txt)  [fallback]
 case "$AGENT_RUNTIME" in
   claude-code)
-    if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    if [ -n "${SESSION_AUTH:-}" ]; then
+      # Session auth: interactive TUI (nudges via paste-buffer)
+      cat > /tmp/launch-agent.sh <<'LAUNCH'
+#!/usr/bin/env bash
+source /tmp/agent-env.sh 2>/dev/null || true
+if [ -f /tmp/prompt.md ]; then
+  exec claude --dangerously-skip-permissions --model "$MODEL" "$(cat /tmp/prompt.md)"
+else
+  exec claude --dangerously-skip-permissions --model "$MODEL"
+fi
+LAUNCH
+    else
       # API key mode: --print loop
       touch /tmp/agent-mode-print  # signal to sidecar
       cat > /tmp/launch-agent.sh <<'LAUNCH'
@@ -146,17 +157,6 @@ while true; do
   fi
   sleep 3
 done
-LAUNCH
-    else
-      # Session auth: interactive TUI (nudges via paste-buffer)
-      cat > /tmp/launch-agent.sh <<'LAUNCH'
-#!/usr/bin/env bash
-source /tmp/agent-env.sh 2>/dev/null || true
-if [ -f /tmp/prompt.md ]; then
-  exec claude --dangerously-skip-permissions --model "$MODEL" "$(cat /tmp/prompt.md)"
-else
-  exec claude --dangerously-skip-permissions --model "$MODEL"
-fi
 LAUNCH
     fi
     ;;
