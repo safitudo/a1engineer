@@ -131,40 +131,63 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **Signup Flow** — POST /api/auth/signup with randomUUID tenant + hashed key storage
 
 **Tests**
-- 143+ unit/integration tests passing (9 test files)
-- Playwright E2E: login, dashboard, wizard, team-detail, agent-console
+- 340+ unit/integration tests passing (vitest)
+- Playwright E2E: login, dashboard, wizard, team-detail, agent-console, template CRUD, auth lifecycle
 - E2E agent harness (node:test, separate from vitest)
-- Channel API tests (GET channels, GET/POST messages, custom channels)
 
 ### Architecture Decisions
 - **BYOK (Bring Your Own Key)** — Users provide their own API keys, no managed billing
-- **Multi-tenant isolation** — API key → tenantId mapping, teams scoped to tenant
-- **Next.js rewrites DON'T proxy WebSocket** — IrcFeed connects directly to Manager:8080
+- **Multi-tenant isolation** — API key to tenantId mapping, teams scoped to tenant
+- **Next.js rewrites DO NOT proxy WebSocket** — IrcFeed connects directly to Manager:8080
 - **Design tokens** — #0d1117 bg, #161b22 card, #3fb950 accent (GitHub dark theme)
+- **SQLite with node:sqlite** — WAL mode, append-only migrations, :memory: test isolation. node:sqlite built-in (Node 22), zero npm deps
+- **Gateway abstraction** — IRC is first adapter; channel management decoupled from team lifecycle to enable cross-team comms and future Slack/Discord integration
 
-### Self-Hosting Milestone — COMPLETE (15/15, b21cf15)
+### Completed Milestones
+- **Self-Hosting** (15/15, b21cf15) — PRs #122-#133
+- **Custom Template CRUD Frontend** — PR #147
+- **E2E Test Expansion** — PRs #141, #142
+- **CI Workflow** — PR #149
+- **SQLite Phase 1-2 (teams.js)** — PR #150
+- **SQLite Phase 3 (tenants.js)** — PR #151
 
-PRs merged this sprint: #122, #124, #123, #126, #127, #129, #130, #131, #132, #133
+### Roadmap
 
-### What's Remaining (Priority Order)
+**M1 — Complete SQLite Migration (current)**
+- Phase 4: templates.js — migrate builtinStore + tenantStore Maps to SQLite (dev-4, in progress)
+- Phase 5: cleanup — strip keyHash from findByApiKey/upsertTenant return values, remove dead Map imports, final pass
+- Deliverable: zero in-memory Maps for persistent state
 
-**P6 — Next Sprint**
-1. **Custom Template CRUD Frontend** — /dashboard/templates page with list + create/edit form. Backend endpoints already exist
-2. **E2E Test Expansion** — Settings page, wizard with custom channels, template flows
-3. **CI Workflow** — Dev-4 blocked on GitHub App 'Workflows: Read and write' permission
-4. **Persistent Tenant Store** — SQLite/Postgres migration (PR #50 parked, tests need async)
+**M2 — Decouple Communication Channels**
+Goal: channels as first-class entities, not team-embedded arrays. IRC first, later Slack/Discord.
+- Channel store (SQLite table) with id, type=irc, config, independent of teams
+- GatewayRegistry abstraction: Manager -> GatewayRegistry -> [IrcAdapter, SlackAdapter, ...]
+- gateway.js: add joinChannel(name) / partChannel(name) for runtime channel mutation
+- router.js: re-key buffers from teamId:channel to channelId
+- Teams subscribe to channels (many-to-many); cross-team comms via shared gateway
+
+**M3 — Dynamic Agent Add/Remove**
+Goal: add/remove agents at runtime without recreating the team.
+- compose.js: per-agent docker compose up/down (not all-or-nothing startTeam/stopTeam)
+- team-compose.yml.ejs: git-init must run for newly added agents (currently one-shot)
+- agents.js API POST: fix git worktree initialization for new agents
+- agents.js API DELETE: rewrite compose file + flush team-meta.json on removal
+
+**M4 — Auth + Interactive Mode + Chuck Fix**
+- API key auth cannot work with interactive mode — session OAuth tokens required for TUI; document tradeoffs
+- Text-mode (print-loop) agents don't show live updates — console.attach captures tmux but input doesn't reach print loop
+- Fix nudger.js: replace direct tmux injection with writeFifo() path for mode-aware delivery
 
 ### Current Assignments
 | Agent | Task | Status |
 |-------|------|--------|
-| arch | Architecture, reviewing | Available |
-| dev-3 | Custom Template CRUD | Assigned |
-| dev-4 | CI Workflow | BLOCKED on GH App Workflows permission |
-| dev-5 | E2E Test Expansion | Assigned |
-| critic-7 | Reviewing PRs | Monitoring |
-| qa-6 | Testing, monitoring | Monitoring |
+| arch | Architecture, roadmap, PR review | Active |
+| dev-3 | CLAUDE.md roadmap update | In progress |
+| dev-4 | M1 Phase 4 — templates.js SQLite | In progress |
+| critic-7 | PR review | Monitoring |
+| qa-6 | Testing | Monitoring |
 
 ### Known Issues
-- GITHUB_TOKEN expired — all agents blocked from pushing/creating PRs
-- GitHub App needs 'Workflows: Read and write' permission for CI workflow pushes
-- PR #50 (PostgreSQL) blocked — tests use sync API but store is async
+- nudger.js auto-nudge broken for print-loop (API key) agents — uses direct tmux, bypasses sidecar FIFO
+- agents.js DELETE does not rewrite compose or persist meta — partial implementation
+- broadcastAgentStatus() in ws.js is dead code — never called
