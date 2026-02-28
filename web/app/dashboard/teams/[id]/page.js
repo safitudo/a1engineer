@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import IrcFeed from '../../../../components/IrcFeed'
 import AgentConsole from '../../../../components/AgentConsole'
+import AgentActivity from '../../../../components/AgentActivity'
 import { TeamWSProvider } from '../../../../components/TeamWSProvider'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -203,7 +204,7 @@ function AgentCard({ agent, isSelected, onToggle }) {
         </div>
       )}
       <div className="mt-2 text-[10px] font-mono text-[#8b949e]">
-        {isSelected ? '▼ console open' : '▶ click for console'}
+        {isSelected ? '▼ console + activity' : '▶ click for console'}
       </div>
     </div>
   )
@@ -340,14 +341,17 @@ export default function TeamDetailPage() {
           </div>
         </aside>
 
-        {/* Right: IRC feed + agent console */}
+        {/* Right: IRC feed + agent console + activity */}
         <div className="flex-1 flex flex-col min-w-0 gap-4">
           {selectedAgent && (
-            <AgentConsole
-              teamId={id}
-              agentId={selectedAgent}
-              onClose={() => setSelectedAgent(null)}
-            />
+            <>
+              <AgentConsole
+                teamId={id}
+                agentId={selectedAgent}
+                onClose={() => setSelectedAgent(null)}
+              />
+              <AgentActivity teamId={id} agentId={selectedAgent} />
+            </>
           )}
           <div className="flex-1 flex flex-col min-w-0">
             <IrcFeed teamId={id} />
