@@ -200,8 +200,8 @@ export function attachWebSocketServer(server) {
             return
           }
 
-          // Tenant scoping — only allow subscribing to own teams
-          if (ws.tenant && team.tenantId && ws.tenant.id !== team.tenantId) {
+          // Tenant scoping — reject unclaimed teams and teams owned by another tenant
+          if (!team.tenantId || (ws.tenant && ws.tenant.id !== team.tenantId)) {
             ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'team not found' }))
             return
           }
@@ -235,7 +235,7 @@ export function attachWebSocketServer(server) {
             ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'team not found' }))
             return
           }
-          if (ws.tenant && team.tenantId && ws.tenant.id !== team.tenantId) {
+          if (!team.tenantId || (ws.tenant && ws.tenant.id !== team.tenantId)) {
             ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'team not found' }))
             return
           }
