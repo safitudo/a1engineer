@@ -124,7 +124,10 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
   })
 }
 
-export async function startTeam(teamConfig, opts = {}) {
+// Shared helper: render compose + write docker-compose.yml + team-meta.json.
+// Returns the absolute path to the written docker-compose.yml.
+// Does NOT run any docker commands.
+async function prepareComposeFiles(teamConfig, opts = {}) {
   const teamDir = join(TEAMS_DIR, teamConfig.id)
   await mkdir(teamDir, { recursive: true })
   // Auto-create secretsDir if any agent needs secrets (api-key, session OAuth, or github)
@@ -170,8 +173,32 @@ export async function startTeam(teamConfig, opts = {}) {
   }
   await writeFile(join(teamDir, 'team-meta.json'), JSON.stringify(meta, null, 2), 'utf8')
 
+  return composePath
+}
+
+export async function startTeam(teamConfig, opts = {}) {
+  const composePath = await prepareComposeFiles(teamConfig, opts)
   await execFileAsync('docker', ['compose', '-f', composePath, 'up', '-d'])
   console.log(`[compose] team ${teamConfig.id} started`)
+}
+
+/**
+ * Re-render compose + meta files without running docker compose up.
+ * Used after agent add/remove to keep the compose file in sync with the store.
+ */
+export async function rewriteCompose(teamConfig, opts = {}) {
+  await prepareComposeFiles(teamConfig, opts)
+  console.log(`[compose] compose rewritten for team ${teamConfig.id}`)
+}
+
+/**
+ * Start a single agent service by name inside an already-running team stack.
+ * Equivalent to: docker compose up -d agent-{agentId}
+ */
+export async function startAgentService(teamId, agentId) {
+  const composePath = join(TEAMS_DIR, teamId, 'docker-compose.yml')
+  await execFileAsync('docker', ['compose', '-f', composePath, 'up', '-d', `agent-${agentId}`])
+  console.log(`[compose] agent service agent-${agentId} started in team ${teamId}`)
 }
 
 // Rehydrate team store from TEAMS_DIR on startup.
