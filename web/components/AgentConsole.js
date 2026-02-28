@@ -24,6 +24,8 @@ export default function AgentConsole({ teamId, agentId, onClose }) {
     let lastData = null
     let dataUnsubscribe = null
     let attachedUnsubscribe = null
+    let detachedUnsubscribe = null
+    let errorUnsubscribe = null
     let observer = null
 
     async function init() {
@@ -60,6 +62,19 @@ export default function AgentConsole({ teamId, agentId, onClose }) {
         terminal.clear()
       })
 
+      // Listen for console.detached — server stopped streaming (agent stopped, WS reconnect, etc.)
+      detachedUnsubscribe = addListener('console.detached', (msg) => {
+        if (msg.agentId !== agentId || !terminal) return
+        attached = false
+        terminal.writeln('\x1b[90m[detached]\x1b[0m')
+      })
+
+      // Listen for error frames from the server
+      errorUnsubscribe = addListener('error', (msg) => {
+        if (!terminal) return
+        terminal.writeln(`\x1b[31m[error] ${msg.code ?? ''}: ${msg.message ?? ''}\x1b[0m`)
+      })
+
       // Listen for console.data frames — full tmux snapshot every 500ms
       dataUnsubscribe = addListener('console.data', (msg) => {
         if (msg.agentId !== agentId || !terminal) return
@@ -93,6 +108,8 @@ export default function AgentConsole({ teamId, agentId, onClose }) {
       disposed = true
       dataUnsubscribe?.()
       attachedUnsubscribe?.()
+      detachedUnsubscribe?.()
+      errorUnsubscribe?.()
       observer?.disconnect()
       detachConsole(agentId)
       terminal?.dispose()
