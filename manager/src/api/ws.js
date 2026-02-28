@@ -5,6 +5,7 @@ import { join } from 'path'
 import { getTeam } from '../store/teams.js'
 import { registerBroadcaster } from '../irc/router.js'
 import { findByApiKey } from '../store/tenants.js'
+import { validateWsToken } from './auth.js'
 import { TEAMS_DIR } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
@@ -165,11 +166,18 @@ export function attachWebSocketServer(server) {
           ws.close()
           return
         }
-        const tenant = findByApiKey(token)
-        if (!tenant) {
-          ws.send(JSON.stringify({ type: 'error', code: 'UNAUTHORIZED', message: 'invalid token' }))
-          ws.close()
-          return
+        // Accept single-use opaque ws-token first, fall back to raw API key
+        let tenant
+        const tenantIdFromToken = validateWsToken(token)
+        if (tenantIdFromToken !== null) {
+          tenant = { id: tenantIdFromToken }
+        } else {
+          tenant = findByApiKey(token)
+          if (!tenant) {
+            ws.send(JSON.stringify({ type: 'error', code: 'UNAUTHORIZED', message: 'invalid token' }))
+            ws.close()
+            return
+          }
         }
         ws.tenant = tenant
         authenticated = true
