@@ -16,6 +16,9 @@ const WS_OPEN = 1
 // Per-team subscriber sets  —  Map<teamId, Set<WebSocket>>
 const subscriptions = new Map()
 
+// Authenticated clients not yet subscribed to a team — for broadcasting team_status
+const authenticatedClients = new Set()
+
 let _unregisterBroadcaster = null
 
 /**
@@ -47,6 +50,29 @@ export function broadcastHeartbeat(teamId, agentId, timestamp) {
  */
 export function broadcastAgentStatus(teamId, agentId, status) {
   fanOut(teamId, JSON.stringify({ type: 'agent_status', teamId, agentId, status }))
+}
+
+/**
+ * Broadcast a team lifecycle status change to ALL connected clients (not just
+ * subscribers of that team).  The dashboard needs this to update team cards.
+ * status: 'created' | 'running' | 'stopped' | 'deleted' | 'error'
+ */
+export function broadcastTeamStatus(teamId, status, extra = {}) {
+  const payload = JSON.stringify({ type: 'team_status', teamId, status, ...extra })
+  // Fan out to every authenticated client, regardless of subscription
+  for (const [, clients] of subscriptions) {
+    for (const ws of clients) {
+      if (ws.readyState === WS_OPEN && ws.bufferedAmount === 0) {
+        ws.send(payload)
+      }
+    }
+  }
+  // Also send to authenticated clients that haven't subscribed to any team yet
+  for (const ws of authenticatedClients) {
+    if (ws.readyState === WS_OPEN && ws.bufferedAmount === 0) {
+      ws.send(payload)
+    }
+  }
 }
 
 // ── console.* helpers ─────────────────────────────────────────────────────────
@@ -181,6 +207,7 @@ export function attachWebSocketServer(server) {
         }
         ws.tenant = tenant
         authenticated = true
+        authenticatedClients.add(ws)
         ws.send(JSON.stringify({ type: 'authenticated' }))
         return
       }
@@ -212,6 +239,7 @@ export function attachWebSocketServer(server) {
           }
 
           currentTeamId = newTeamId
+          authenticatedClients.delete(ws)  // now tracked via team subscription
           if (!subscriptions.has(currentTeamId)) subscriptions.set(currentTeamId, new Set())
           subscriptions.get(currentTeamId).add(ws)
 
@@ -347,6 +375,7 @@ export function attachWebSocketServer(server) {
     })
 
     ws.on('close', () => {
+      authenticatedClients.delete(ws)
       if (currentTeamId) {
         subscriptions.get(currentTeamId)?.delete(ws)
       }

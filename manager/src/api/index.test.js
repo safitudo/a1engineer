@@ -17,6 +17,7 @@ vi.mock('../orchestrator/compose.js', () => ({
 vi.mock('./ws.js', () => ({
   broadcastAgentStatus: vi.fn(),
   broadcastHeartbeat: vi.fn(),
+  broadcastTeamStatus: vi.fn(),
 }))
 
 // Mock IRC gateway to avoid real TCP connections

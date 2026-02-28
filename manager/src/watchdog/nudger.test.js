@@ -12,6 +12,7 @@ vi.mock('../store/teams.js', () => ({
 
 vi.mock('../api/ws.js', () => ({
   broadcastAgentStatus: vi.fn(),
+  broadcastTeamStatus: vi.fn(),
 }))
 
 import { writeFifo } from '../orchestrator/fifo.js'
