@@ -274,6 +274,10 @@ export function attachWebSocketServer(server) {
             ws.send(JSON.stringify({ type: 'error', code: 'MISSING_DATA', message: 'data required' }))
             return
           }
+          if (data.length > 4096) {
+            ws.send(JSON.stringify({ type: 'error', code: 'PAYLOAD_TOO_LARGE', message: 'data exceeds 4096 chars' }))
+            return
+          }
 
           const stream = activeStreams.get(agentId)
           if (!stream) {
