@@ -124,6 +124,18 @@ describe('GET /api/teams/:id/channels', () => {
     expect(res.status).toBe(404)
     expect(res.body.code).toBe('NOT_FOUND')
   })
+
+  it('returns custom channels when team has channels configured', async () => {
+    const res = await post(port, '/api/teams', {
+      ...VALID_TEAM,
+      channels: ['#custom', '#ops'],
+    })
+    expect(res.status).toBe(201)
+    const teamId = res.body.id
+    const chRes = await get(port, `/api/teams/${teamId}/channels`)
+    expect(chRes.status).toBe(200)
+    expect(chRes.body.map((c) => c.name)).toEqual(['#custom', '#ops'])
+  })
 })
 
 // ── GET /api/teams/:id/channels/:name/messages ─────────────────────────────────

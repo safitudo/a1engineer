@@ -1,7 +1,7 @@
 import IRC from 'irc-framework'
 import { EventEmitter } from 'events'
+import { DEFAULT_CHANNELS } from '../store/teams.js'
 
-const CHANNELS = ['#main', '#tasks', '#code', '#testing', '#merges']
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30000
 const RECONNECT_FACTOR = 2
@@ -23,17 +23,23 @@ export class IrcGateway extends EventEmitter {
   #teamName
   #host
   #port
+  #channels
   #client
   #reconnectDelay = RECONNECT_BASE_MS
   #destroyed = false
   #reconnectTimer = null
 
-  constructor({ teamId, teamName, host, port = 6667 }) {
+  constructor({ teamId, teamName, host, port = 6667, channels = DEFAULT_CHANNELS }) {
     super()
     this.#teamId = teamId
     this.#teamName = teamName
     this.#host = host ?? `ergo-${teamName}`
     this.#port = port
+    this.#channels = channels
+  }
+
+  get channels() {
+    return this.#channels
   }
 
   connect() {
@@ -49,7 +55,7 @@ export class IrcGateway extends EventEmitter {
 
     this.#client.on('registered', () => {
       this.#reconnectDelay = RECONNECT_BASE_MS
-      for (const channel of CHANNELS) {
+      for (const channel of this.#channels) {
         this.#client.join(channel)
       }
       this.emit('connect', { teamId: this.#teamId, teamName: this.#teamName })
@@ -119,6 +125,7 @@ export function createGateway(team, { onMessage } = {}) {
     teamName: team.name,
     host: team.ergo?.host,
     port: team.ergo?.port,
+    channels: team.channels ?? DEFAULT_CHANNELS,
   })
 
   if (onMessage) gw.on('message', onMessage)

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import * as teamStore from '../store/teams.js'
+import { DEFAULT_CHANNELS } from '../store/teams.js'
 import { readMessages } from '../irc/router.js'
 import { getGateway } from '../irc/gateway.js'
 
@@ -18,8 +19,7 @@ function requireTeam(req, res) {
 router.get('/', (req, res) => {
   const team = requireTeam(req, res)
   if (!team) return
-  // Static list of well-known channels — gateway will provide live membership
-  res.json(['#main', '#tasks', '#code', '#testing', '#merges'].map((name) => ({ name, team: team.id })))
+  res.json((team.channels ?? DEFAULT_CHANNELS).map((name) => ({ name, team: team.id })))
 })
 
 // GET /api/teams/:id/channels/:name/messages — read messages (via IRC gateway)

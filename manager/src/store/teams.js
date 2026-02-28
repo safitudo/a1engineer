@@ -2,6 +2,8 @@ import { randomUUID, randomBytes } from 'crypto'
 
 // In-memory store — Phase 1 only. Graduated to SQLite/Postgres in Phase 2.
 
+export const DEFAULT_CHANNELS = ['#main', '#tasks', '#code', '#testing', '#merges']
+
 // Normalize auth config — never persist raw API keys.
 function normalizeAuth(auth) {
   const mode = auth?.mode ?? 'session'
@@ -26,6 +28,7 @@ export function createTeam(config, { tenantId = null } = {}) {
     repo: config.repo,
     github: config.github ?? null,
     ergo: config.ergo ?? null,
+    channels: config.channels ?? DEFAULT_CHANNELS,
     agents: (config.agents ?? []).map((a, i) => ({
       id: a.id ?? `${config.name}-${a.role}${i > 0 ? `-${i}` : ''}`,
       role: a.role,
@@ -74,6 +77,10 @@ export function restoreTeam(team) {
   // Backfill internalToken for teams created before MANAGER_TOKEN feature
   if (!team.internalToken) {
     team = { ...team, internalToken: randomBytes(32).toString('hex') }
+  }
+  // Backfill channels for teams created before configurable-channels feature
+  if (!team.channels) {
+    team = { ...team, channels: DEFAULT_CHANNELS }
   }
   store.set(team.id, team)
   return team
