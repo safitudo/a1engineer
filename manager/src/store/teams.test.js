@@ -1,5 +1,9 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { createTeam, getTeam, listTeams, updateTeam, deleteTeam, restoreTeam, DEFAULT_CHANNELS } from './teams.js'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
+import { initDb, closeDb } from './db.js'
+import { createTeam, getTeam, listTeams, updateTeam, deleteTeam, restoreTeam, findByInternalToken, DEFAULT_CHANNELS } from './teams.js'
+
+beforeAll(() => initDb(':memory:'))
+afterAll(() => closeDb())
 
 afterEach(() => {
   for (const team of listTeams()) deleteTeam(team.id)
@@ -177,5 +181,16 @@ describe('restoreTeam channels', () => {
     const team = createTeam({ name: 'test', agents: [], channels: custom })
     const restored = restoreTeam(team)
     expect(restored.channels).toEqual(custom)
+  })
+})
+
+describe('findByInternalToken', () => {
+  it('returns the team matching the token', () => {
+    const team = createTeam({ name: 'test', agents: [] })
+    expect(findByInternalToken(team.internalToken)).toEqual(team)
+  })
+
+  it('returns null for an unknown token', () => {
+    expect(findByInternalToken('not-a-real-token')).toBeNull()
   })
 })

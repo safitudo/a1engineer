@@ -6,6 +6,7 @@ import { attachWebSocketServer } from './ws.js'
 import { createTeam, listTeams, deleteTeam } from '../store/teams.js'
 import { findByApiKey, upsertTenant } from '../store/tenants.js'
 import { execFile } from 'child_process'
+import { initDb, closeDb } from '../store/db.js'
 
 // Mock compose to avoid Docker calls
 vi.mock('../orchestrator/compose.js', () => ({
@@ -50,6 +51,8 @@ const execFileAsync = execFile[Symbol.for('nodejs.util.promisify.custom')]
 let server
 let port
 
+beforeAll(() => initDb(':memory:'))
+
 beforeAll(async () => {
   const app = createApp()
   server = http.createServer(app)
@@ -58,9 +61,10 @@ beforeAll(async () => {
   port = server.address().port
 })
 
-afterAll(() => {
+afterAll(async () => {
   for (const t of listTeams()) deleteTeam(t.id)
-  return new Promise((resolve) => server.close(resolve))
+  await new Promise((resolve) => server.close(resolve))
+  closeDb()
 })
 
 beforeEach(() => {

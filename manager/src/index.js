@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import { resolve, join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import * as teamStore from './store/teams.js'
+import { initDb } from './store/db.js'
 import { TEAMS_DIR } from './constants.js'
 
 // ── Load .env from project root ──────────────────────────────────────────────
@@ -72,6 +73,7 @@ async function main() {
       }
 
       // Fallback: direct mode (Manager won't know about this team)
+      initDb()
       const secretsDir = secretsArg ? resolve(secretsArg) : null
       const apiKey = config.auth?.apiKey ?? null
       const team = teamStore.createTeam(config)
@@ -111,6 +113,7 @@ async function main() {
       } catch { /* Manager not running — fall through */ }
 
       // Fallback: direct mode — resolve name by scanning compose dirs
+      initDb()
       let resolvedId = teamId
       const composePath = join(TEAMS_DIR, teamId, 'docker-compose.yml')
       try { await access(composePath) } catch {
@@ -168,6 +171,7 @@ async function main() {
 
     case 'serve': {
       const { port = '8080' } = parseArgs(rest)
+      initDb()
       const app = createApp()
       const server = app.listen(Number(port), async () => {
         console.log(`[manager] REST API + WebSocket listening on :${port}`)

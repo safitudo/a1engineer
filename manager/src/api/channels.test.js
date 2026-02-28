@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import http from 'http'
 import { createApp } from './index.js'
 import { listTeams, deleteTeam } from '../store/teams.js'
+import { initDb, closeDb } from '../store/db.js'
 
 // Mock compose to avoid Docker calls
 vi.mock('../orchestrator/compose.js', () => ({
@@ -73,6 +74,9 @@ function startServer() {
     })
   })
 }
+
+beforeAll(() => initDb(':memory:'))
+afterAll(() => closeDb())
 
 beforeEach(async () => {
   vi.clearAllMocks()
