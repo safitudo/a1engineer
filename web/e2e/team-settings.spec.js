@@ -324,4 +324,21 @@ test.describe('Team Settings — error state', () => {
     await expect(page.getByText(/Failed to load team/i)).toBeVisible()
     await expect(page.getByRole('link', { name: /← Back to dashboard/i })).toBeVisible()
   })
+
+  test('shows 404 state when team is not found', async ({ page }) => {
+    await authenticate(page)
+    await page.route(`/api/teams/${TEAM_ID}`, route =>
+      route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'not found' }),
+      })
+    )
+
+    await page.goto(`/dashboard/teams/${TEAM_ID}/settings`)
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByText(/Failed to load team/i)).toBeVisible()
+    await expect(page.getByRole('link', { name: /← Back to dashboard/i })).toBeVisible()
+  })
 })
