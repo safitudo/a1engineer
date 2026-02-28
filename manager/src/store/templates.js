@@ -1,10 +1,13 @@
 // WARNING: Templates must not contain secrets.
 // The agent env field is for non-sensitive config only (e.g. CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).
-import { readFile } from 'fs/promises'
+import { readFile, writeFile, mkdir, readdir, access } from 'fs/promises'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { TEAMS_DIR } from '../constants.js'
 
 const DATA_FILE = join(dirname(fileURLToPath(import.meta.url)), '../../data/templates.json')
+
+// ── Builtin templates (read-only) ────────────────────────────────────────────
 
 /** @type {Map<string, object>} */
 let builtinStore = new Map()
@@ -12,9 +15,6 @@ let builtinStore = new Map()
 /**
  * Per-tenant custom templates.
  * Map<tenantId, Map<templateId, template>>
- * TMPL-2 (dev-3) will wire in file persistence — this in-memory map
- * is the canonical source; loadTenantTemplates / saveTenantTemplates
- * are the extension points for persistence.
  */
 const tenantStore = new Map()
 
@@ -91,9 +91,9 @@ function validateAgents(agents) {
  * Create a custom template for a tenant.
  * @param {string} tenantId
  * @param {{ name: string, description?: string, agents: object[] }} data
- * @returns {{ template: object }|{ error: string }}
+ * @returns {Promise<{ template: object }|{ error: string }>}
  */
-export function createTemplate(tenantId, data) {
+export async function createTemplate(tenantId, data) {
   const { name, description = '', agents } = data ?? {}
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -123,6 +123,7 @@ export function createTemplate(tenantId, data) {
 
   if (!tenantStore.has(tenantId)) tenantStore.set(tenantId, new Map())
   tenantStore.get(tenantId).set(id, template)
+  await persistTenantTemplates(tenantId)
   return { template }
 }
 
@@ -132,9 +133,9 @@ export function createTemplate(tenantId, data) {
  * @param {string} tenantId
  * @param {string} id
  * @param {{ name?: string, description?: string, agents?: object[] }} updates
- * @returns {{ template: object }|{ error: string, code: string }}
+ * @returns {Promise<{ template: object }|{ error: string, code: string }>}
  */
-export function updateTemplate(tenantId, id, updates) {
+export async function updateTemplate(tenantId, id, updates) {
   if (builtinStore.has(id)) {
     return { error: 'builtin templates are read-only', code: 'FORBIDDEN' }
   }
@@ -171,6 +172,7 @@ export function updateTemplate(tenantId, id, updates) {
     updatedAt: new Date().toISOString(),
   }
   tenantMap.set(id, updated)
+  await persistTenantTemplates(tenantId)
   return { template: updated }
 }
 
@@ -179,9 +181,9 @@ export function updateTemplate(tenantId, id, updates) {
  * Builtin templates cannot be deleted.
  * @param {string} tenantId
  * @param {string} id
- * @returns {{ ok: true }|{ error: string, code: string }}
+ * @returns {Promise<{ ok: true }|{ error: string, code: string }>}
  */
-export function deleteTemplate(tenantId, id) {
+export async function deleteTemplate(tenantId, id) {
   if (builtinStore.has(id)) {
     return { error: 'builtin templates are read-only', code: 'FORBIDDEN' }
   }
@@ -190,13 +192,14 @@ export function deleteTemplate(tenantId, id) {
     return { error: 'template not found', code: 'NOT_FOUND' }
   }
   tenantMap.delete(id)
+  await persistTenantTemplates(tenantId)
   return { ok: true }
 }
 
-// ── Persistence hooks (wired by TMPL-2) ───────────────────────────────────
+// ── Persistence ────────────────────────────────────────────────────────────
 
 /**
- * Get all custom templates for a tenant (for serialization by TMPL-2).
+ * Get all custom templates for a tenant (used by persistence layer).
  */
 export function getTenantTemplates(tenantId) {
   const tenantMap = tenantStore.get(tenantId)
@@ -205,11 +208,58 @@ export function getTenantTemplates(tenantId) {
 }
 
 /**
- * Restore persisted custom templates for a tenant (called by TMPL-2 on startup).
+ * Restore persisted custom templates for a tenant (called on startup).
  */
 export function restoreTenantTemplates(tenantId, templates) {
   tenantStore.set(tenantId, new Map(templates.map((t) => [t.id, t])))
 }
 
-// Load on startup
+function tenantTemplatesPath(tenantId) {
+  return join(TEAMS_DIR, tenantId, 'templates.json')
+}
+
+async function persistTenantTemplates(tenantId) {
+  const templates = getTenantTemplates(tenantId)
+  const dir = join(TEAMS_DIR, tenantId)
+  await mkdir(dir, { recursive: true })
+  await writeFile(tenantTemplatesPath(tenantId), JSON.stringify(templates, null, 2), 'utf8')
+}
+
+export async function loadTenantTemplates(tenantId) {
+  try {
+    const raw = await readFile(tenantTemplatesPath(tenantId), 'utf8')
+    const arr = JSON.parse(raw)
+    restoreTenantTemplates(tenantId, arr.filter((t) => t.id))
+  } catch {
+    // File doesn't exist yet — start empty
+    if (!tenantStore.has(tenantId)) tenantStore.set(tenantId, new Map())
+  }
+}
+
+/**
+ * Scan TEAMS_DIR for per-tenant templates.json files and load them.
+ * Call once on server startup after teams are rehydrated.
+ * Returns array of tenantIds that were loaded.
+ */
+export async function rehydrateTenantTemplates() {
+  let dirs
+  try {
+    dirs = await readdir(TEAMS_DIR)
+  } catch {
+    return []
+  }
+  const loaded = []
+  for (const dir of dirs) {
+    try {
+      await access(tenantTemplatesPath(dir))
+      await loadTenantTemplates(dir)
+      loaded.push(dir)
+    } catch {
+      // No templates.json for this tenant dir — skip
+    }
+  }
+  return loaded
+}
+
+// Load builtins on startup
 loadTemplates()

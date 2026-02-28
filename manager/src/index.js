@@ -21,6 +21,7 @@ try {
   }
 } catch { /* .env not found — that's fine */ }
 import { startTeam, stopTeam, rehydrateTeams } from './orchestrator/compose.js'
+import { rehydrateTenantTemplates } from './store/templates.js'
 import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'
 import { startNudger } from './watchdog/nudger.js'
@@ -178,6 +179,14 @@ async function main() {
           }
         } catch (err) {
           console.error('[manager] rehydration failed:', err)
+        }
+        try {
+          const restoredTemplates = await rehydrateTenantTemplates()
+          if (restoredTemplates.length > 0) {
+            console.log(`[manager] rehydrated templates for ${restoredTemplates.length} tenant(s)`)
+          }
+        } catch (err) {
+          console.error('[manager] template rehydration failed:', err)
         }
       })
       attachWebSocketServer(server)

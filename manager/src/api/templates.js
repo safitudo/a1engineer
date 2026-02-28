@@ -31,7 +31,7 @@ router.get('/', (req, res) => {
   res.json({ templates: listTemplates(tenant?.id ?? null) })
 })
 
-// GET /api/templates/:id — single template by id
+// GET /api/templates/:id — single template by id (builtin first, then tenant-custom if authenticated)
 router.get('/:id', (req, res) => {
   const tenant = resolveTenant(req)
   const tmpl = getTemplate(req.params.id, tenant?.id ?? null)
@@ -42,11 +42,11 @@ router.get('/:id', (req, res) => {
 // ── Authenticated write endpoints ──────────────────────────────────────────
 
 // POST /api/templates — create custom template (tenant-scoped)
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   if (!req.tenant) {
     return res.status(403).json({ error: 'only tenant accounts can create templates', code: 'FORBIDDEN' })
   }
-  const result = createTemplate(req.tenant.id, req.body)
+  const result = await createTemplate(req.tenant.id, req.body)
   if (result.error) {
     return res.status(400).json({ error: result.error, code: 'VALIDATION_ERROR' })
   }
@@ -54,11 +54,11 @@ router.post('/', requireAuth, (req, res) => {
 })
 
 // PUT /api/templates/:id — update custom template
-router.put('/:id', requireAuth, (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   if (!req.tenant) {
     return res.status(403).json({ error: 'only tenant accounts can update templates', code: 'FORBIDDEN' })
   }
-  const result = updateTemplate(req.tenant.id, req.params.id, req.body)
+  const result = await updateTemplate(req.tenant.id, req.params.id, req.body)
   if (result.error) {
     const status = result.code === 'NOT_FOUND' ? 404 : result.code === 'FORBIDDEN' ? 403 : 400
     return res.status(status).json({ error: result.error, code: result.code ?? 'VALIDATION_ERROR' })
@@ -67,11 +67,11 @@ router.put('/:id', requireAuth, (req, res) => {
 })
 
 // DELETE /api/templates/:id — delete custom template
-router.delete('/:id', requireAuth, (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   if (!req.tenant) {
     return res.status(403).json({ error: 'only tenant accounts can delete templates', code: 'FORBIDDEN' })
   }
-  const result = deleteTemplate(req.tenant.id, req.params.id)
+  const result = await deleteTemplate(req.tenant.id, req.params.id)
   if (result.error) {
     const status = result.code === 'NOT_FOUND' ? 404 : 403
     return res.status(status).json({ error: result.error, code: result.code })
