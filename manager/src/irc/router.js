@@ -14,6 +14,8 @@
  *   [STATUS] update
  */
 
+import { getTeam } from '../store/teams.js'
+
 const TAG_RE = /^\[([A-Z]+)\]\s*(.*)/
 
 // Ring buffer per (teamId, channel), capped at MAX_MESSAGES entries
@@ -105,17 +107,11 @@ export function readMessages(teamId, channel, { limit = 100, since } = {}) {
 }
 
 /**
- * List all channels that have buffered messages for a team.
+ * List configured channels for a team.
+ * Returns the team's channels array from the store, or [] if the team is unknown.
  */
 export function listChannels(teamId) {
-  const prefix = `${teamId}:`
-  const channels = []
-  for (const key of buffers.keys()) {
-    if (key.startsWith(prefix)) {
-      channels.push(key.slice(prefix.length))
-    }
-  }
-  return channels
+  return getTeam(teamId)?.channels ?? []
 }
 
 /**
