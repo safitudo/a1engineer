@@ -164,4 +164,78 @@ test.describe('Signup page', () => {
     await page.waitForURL('**/dashboard')
     await expect(page).toHaveURL(/\/dashboard/)
   })
+
+  test('submit button enables once both fields are filled', async ({ page }) => {
+    await page.goto('/signup')
+    await page.waitForLoadState('networkidle')
+
+    const btn = page.getByRole('button', { name: 'Create account' })
+    await expect(btn).toBeDisabled()
+
+    await page.getByLabel('Organization name').fill('Acme Corp')
+    await expect(btn).toBeDisabled()
+
+    await page.getByLabel('Work email').fill('admin@acme.com')
+    await expect(btn).toBeEnabled()
+  })
+
+  test('submit button shows loading state while request is in-flight', async ({ page }) => {
+    let resolveRequest
+    await page.route('/api/auth/signup', route =>
+      new Promise(resolve => { resolveRequest = () => resolve(route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ apiKey: 'sk-x', name: 'Acme' }) })) })
+    )
+
+    await page.goto('/signup')
+    await page.waitForLoadState('networkidle')
+
+    await page.getByLabel('Organization name').fill('Acme Corp')
+    await page.getByLabel('Work email').fill('admin@acme.com')
+    await page.getByRole('button', { name: 'Create account' }).click()
+
+    // Button switches to loading text while request is pending
+    await expect(page.getByRole('button', { name: 'Creating account...' })).toBeVisible()
+
+    resolveRequest()
+    await expect(page.getByRole('heading', { name: 'Account created' })).toBeVisible()
+  })
+
+  test('success screen shows copy button for the API key', async ({ page }) => {
+    await page.route('/api/auth/signup', route =>
+      route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ apiKey: 'sk-ant-api03-testkey', name: 'Acme Corp' }),
+      })
+    )
+
+    await page.goto('/signup')
+    await page.waitForLoadState('networkidle')
+
+    await page.getByLabel('Organization name').fill('Acme Corp')
+    await page.getByLabel('Work email').fill('admin@acme.com')
+    await page.getByRole('button', { name: 'Create account' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Account created' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Copy API key' })).toBeVisible()
+  })
+
+  test('success screen shows the organisation name in the welcome message', async ({ page }) => {
+    await page.route('/api/auth/signup', route =>
+      route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ apiKey: 'sk-ant-api03-testkey', name: 'Widget Co' }),
+      })
+    )
+
+    await page.goto('/signup')
+    await page.waitForLoadState('networkidle')
+
+    await page.getByLabel('Organization name').fill('Widget Co')
+    await page.getByLabel('Work email').fill('ops@widget.co')
+    await page.getByRole('button', { name: 'Create account' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Account created' })).toBeVisible()
+    await expect(page.getByText('Widget Co')).toBeVisible()
+  })
 })
