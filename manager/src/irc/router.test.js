@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import {
   routeMessage,
   readMessages,
@@ -6,6 +6,11 @@ import {
   listChannels,
   clearTeamBuffers,
 } from './router.js'
+import { initDb, closeDb, getDb } from '../store/db.js'
+import { createTeam } from '../store/teams.js'
+
+beforeAll(() => initDb(':memory:'))
+afterAll(() => closeDb())
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +47,8 @@ afterEach(() => {
   // Clear buffers used in tests
   clearTeamBuffers(TEAM)
   clearTeamBuffers(OTHER_TEAM)
+  // Clear teams table so each test starts clean
+  getDb().exec('DELETE FROM teams')
 })
 
 // ── routeMessage — insertion ────────────────────────────────────────────────────
@@ -353,30 +360,31 @@ describe('registerBroadcaster', () => {
 // ── listChannels ───────────────────────────────────────────────────────────────
 
 describe('listChannels', () => {
-  it('returns empty array for a team with no messages', () => {
+  it('returns empty array for an unknown team', () => {
     expect(listChannels('no-such-team-xyz')).toEqual([])
   })
 
-  it('returns channel after a message is routed to it', () => {
-    routeMessage(makeEvent({ channel: CHANNEL }))
-    expect(listChannels(TEAM)).toContain(CHANNEL)
-  })
-
-  it('returns all channels that have messages for the team', () => {
-    routeMessage(makeEvent({ channel: CHANNEL }))
-    routeMessage(makeEvent({ channel: CHANNEL2 }))
-    const channels = listChannels(TEAM)
+  it('returns configured channels for a team regardless of buffer state', () => {
+    const team = createTeam({ name: 'test', channels: [CHANNEL, CHANNEL2], agents: [] })
+    const channels = listChannels(team.id)
     expect(channels).toContain(CHANNEL)
     expect(channels).toContain(CHANNEL2)
     expect(channels).toHaveLength(2)
   })
 
+  it('returns channels even when no messages have been routed', () => {
+    const team = createTeam({ name: 'test', channels: [CHANNEL], agents: [] })
+    // No routeMessage calls — channel still appears because it is configured
+    expect(listChannels(team.id)).toContain(CHANNEL)
+  })
+
   it('does not include channels from other teams', () => {
-    routeMessage(makeEvent({ teamId: TEAM, channel: CHANNEL }))
-    routeMessage(makeEvent({ teamId: OTHER_TEAM, channel: '#other' }))
-    const channels = listChannels(TEAM)
-    expect(channels).toContain(CHANNEL)
-    expect(channels).not.toContain('#other')
+    const teamA = createTeam({ name: 'a', channels: [CHANNEL], agents: [] })
+    const teamB = createTeam({ name: 'b', channels: ['#other'], agents: [] })
+    expect(listChannels(teamA.id)).toContain(CHANNEL)
+    expect(listChannels(teamA.id)).not.toContain('#other')
+    expect(listChannels(teamB.id)).toContain('#other')
+    expect(listChannels(teamB.id)).not.toContain(CHANNEL)
   })
 })
 
@@ -389,12 +397,6 @@ describe('clearTeamBuffers', () => {
     clearTeamBuffers(TEAM)
     expect(readMessages(TEAM, CHANNEL)).toEqual([])
     expect(readMessages(TEAM, CHANNEL2)).toEqual([])
-  })
-
-  it('listChannels returns empty after clear', () => {
-    routeMessage(makeEvent({ channel: CHANNEL }))
-    clearTeamBuffers(TEAM)
-    expect(listChannels(TEAM)).toEqual([])
   })
 
   it('does not affect buffers for other teams', () => {
