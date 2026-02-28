@@ -214,8 +214,8 @@ function Step0({ templates, selectedId, onSelect, loading }) {
   )
 }
 
-// Step 1: Team name + repo URL
-function Step1({ name, setName, repoUrl, setRepoUrl, error }) {
+// Step 1: Team name + repo URL + optional channels
+function Step1({ name, setName, repoUrl, setRepoUrl, channels, setChannels, error }) {
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -236,6 +236,17 @@ function Step1({ name, setName, repoUrl, setRepoUrl, error }) {
         placeholder="https://github.com/org/repo"
         required
       />
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm text-[#8b949e] font-medium">IRC channels <span className="text-[#8b949e]/50 font-normal">(optional)</span></label>
+        <input
+          type="text"
+          value={channels}
+          onChange={(e) => setChannels(e.target.value)}
+          placeholder="#main, #tasks, #code, #testing, #merges"
+          className="bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-sm text-[#e6edf3] placeholder-[#8b949e]/50 focus:outline-none focus:border-[#3fb950] transition-colors font-mono"
+        />
+        <p className="text-xs text-[#8b949e]">Comma-separated channel names with # prefix. Leave blank to use the 5 default channels.</p>
+      </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   )
@@ -385,7 +396,7 @@ function Step4({ agents, apiKey, setApiKey, error }) {
 }
 
 // Step 4: Review + Launch
-function Step5({ name, repoUrl, agents, templateName, loading }) {
+function Step5({ name, repoUrl, agents, channels, templateName, loading }) {
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -444,6 +455,12 @@ function Step5({ name, repoUrl, agents, templateName, loading }) {
             </div>
           </div>
         )}
+        {channels && channels.trim() && (
+          <div className="flex justify-between px-4 py-3">
+            <span className="text-xs text-[#8b949e] font-mono">Channels</span>
+            <span className="text-sm text-[#79c0ff] font-mono truncate max-w-[220px]">{channels.trim()}</span>
+          </div>
+        )}
         <div className="flex justify-between px-4 py-3">
           <span className="text-xs text-[#8b949e] font-mono">API key</span>
           <span className="text-sm text-[#e6edf3] font-mono">••••••••</span>
@@ -473,6 +490,7 @@ export default function NewTeamPage() {
   // Form state
   const [name, setName] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
+  const [channels, setChannels] = useState('')
   const [agents, setAgents] = useState([{ role: 'dev', model: 'sonnet', runtime: 'claude-code', prompt: '' }])
   const [apiKey, setApiKey] = useState('')
 
@@ -533,6 +551,10 @@ export default function NewTeamPage() {
     setError(null)
     setLoading(true)
 
+    const parsedChannels = channels.trim()
+      ? channels.split(',').map((c) => c.trim()).filter((c) => c.startsWith('#') && c.length > 1)
+      : null
+
     const body = {
       name: name.trim(),
       repo: { url: repoUrl.trim() },
@@ -546,6 +568,7 @@ export default function NewTeamPage() {
         mode: 'api-key',
         apiKey: apiKey.trim(),
       },
+      ...(parsedChannels && parsedChannels.length > 0 ? { channels: parsedChannels } : {}),
       ...(selectedTemplateId !== 'custom' ? { template: selectedTemplateId } : {}),
     }
 
@@ -593,6 +616,8 @@ export default function NewTeamPage() {
               setName={setName}
               repoUrl={repoUrl}
               setRepoUrl={setRepoUrl}
+              channels={channels}
+              setChannels={setChannels}
               error={error}
             />
           )}
@@ -612,6 +637,7 @@ export default function NewTeamPage() {
               name={name}
               repoUrl={repoUrl}
               agents={agents}
+              channels={channels}
               templateName={selectedTemplateName}
               loading={loading}
             />

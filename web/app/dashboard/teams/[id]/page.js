@@ -72,8 +72,6 @@ function timeAgo(ts) {
 
 // ── IRC connection info ────────────────────────────────────────────────────────
 
-const IRC_CHANNELS = ['#main', '#tasks', '#code', '#testing', '#merges']
-
 function IrcConnectionInfo({ team }) {
   const [copied, setCopied] = useState(null)
   const ergo = team.ergo ?? {}
@@ -129,7 +127,7 @@ function IrcConnectionInfo({ team }) {
       <div>
         <div className="text-[#8b949e] mb-1.5">channels</div>
         <div className="flex flex-wrap gap-1">
-          {IRC_CHANNELS.map(ch => (
+          {(team.channels ?? ['#main', '#tasks', '#code', '#testing', '#merges']).map(ch => (
             <button
               key={ch}
               onClick={() => copy(ch, ch)}
