@@ -42,11 +42,11 @@ router.get('/:id', (req, res) => {
 // ── Authenticated write endpoints ──────────────────────────────────────────
 
 // POST /api/templates — create custom template (tenant-scoped)
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, (req, res) => {
   if (!req.tenant) {
     return res.status(403).json({ error: 'only tenant accounts can create templates', code: 'FORBIDDEN' })
   }
-  const result = await createTemplate(req.tenant.id, req.body)
+  const result = createTemplate(req.tenant.id, req.body)
   if (result.error) {
     return res.status(400).json({ error: result.error, code: 'VALIDATION_ERROR' })
   }
@@ -54,11 +54,11 @@ router.post('/', requireAuth, async (req, res) => {
 })
 
 // PUT /api/templates/:id — update custom template
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', requireAuth, (req, res) => {
   if (!req.tenant) {
     return res.status(403).json({ error: 'only tenant accounts can update templates', code: 'FORBIDDEN' })
   }
-  const result = await updateTemplate(req.tenant.id, req.params.id, req.body)
+  const result = updateTemplate(req.tenant.id, req.params.id, req.body)
   if (result.error) {
     const status = result.code === 'NOT_FOUND' ? 404 : result.code === 'FORBIDDEN' ? 403 : 400
     return res.status(status).json({ error: result.error, code: result.code ?? 'VALIDATION_ERROR' })
@@ -67,11 +67,11 @@ router.put('/:id', requireAuth, async (req, res) => {
 })
 
 // DELETE /api/templates/:id — delete custom template
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAuth, (req, res) => {
   if (!req.tenant) {
     return res.status(403).json({ error: 'only tenant accounts can delete templates', code: 'FORBIDDEN' })
   }
-  const result = await deleteTemplate(req.tenant.id, req.params.id)
+  const result = deleteTemplate(req.tenant.id, req.params.id)
   if (result.error) {
     const status = result.code === 'NOT_FOUND' ? 404 : 403
     return res.status(status).json({ error: result.error, code: result.code })

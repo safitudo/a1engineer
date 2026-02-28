@@ -98,9 +98,9 @@ function validateAgents(agents) {
  * Create a custom template for a tenant.
  * @param {string} tenantId
  * @param {{ name: string, description?: string, agents: object[] }} data
- * @returns {Promise<{ template: object }|{ error: string }>}
+ * @returns {{ template: object }|{ error: string }}
  */
-export async function createTemplate(tenantId, data) {
+export function createTemplate(tenantId, data) {
   const { name, description = '', agents } = data ?? {}
 
   if (typeof name !== 'string' || !name.trim()) {
@@ -143,9 +143,9 @@ export async function createTemplate(tenantId, data) {
  * @param {string} tenantId
  * @param {string} id
  * @param {{ name?: string, description?: string, agents?: object[] }} updates
- * @returns {Promise<{ template: object }|{ error: string, code: string }>}
+ * @returns {{ template: object }|{ error: string, code: string }}
  */
-export async function updateTemplate(tenantId, id, updates) {
+export function updateTemplate(tenantId, id, updates) {
   if (builtinStore.has(id)) {
     return { error: 'builtin templates are read-only', code: 'FORBIDDEN' }
   }
@@ -195,9 +195,9 @@ export async function updateTemplate(tenantId, id, updates) {
  * Builtin templates cannot be deleted.
  * @param {string} tenantId
  * @param {string} id
- * @returns {Promise<{ ok: true }|{ error: string, code: string }>}
+ * @returns {{ ok: true }|{ error: string, code: string }}
  */
-export async function deleteTemplate(tenantId, id) {
+export function deleteTemplate(tenantId, id) {
   if (builtinStore.has(id)) {
     return { error: 'builtin templates are read-only', code: 'FORBIDDEN' }
   }
@@ -216,34 +216,6 @@ export async function deleteTemplate(tenantId, id) {
  */
 export function getTenantTemplates(tenantId) {
   return getDb().prepare('SELECT * FROM templates WHERE tenant_id = ?').all(tenantId).map(rowToTemplate)
-}
-
-/**
- * Restore persisted custom templates for a tenant (called on startup / import).
- */
-export function restoreTenantTemplates(tenantId, templates) {
-  const stmt = getDb().prepare(`
-    INSERT OR REPLACE INTO templates (id, tenant_id, name, description, agents, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `)
-  for (const t of templates) {
-    stmt.run(t.id, tenantId, t.name, t.description ?? '', JSON.stringify(t.agents ?? []), t.createdAt, t.updatedAt)
-  }
-}
-
-/**
- * No-op: SQLite persists across restarts, no file loading needed.
- */
-export async function loadTenantTemplates(_tenantId) {
-  // SQLite persists across restarts — nothing to do
-}
-
-/**
- * No-op: SQLite persists across restarts, no directory scan needed.
- * Returns empty array for startup compatibility.
- */
-export async function rehydrateTenantTemplates() {
-  return []
 }
 
 // Load builtins on startup
