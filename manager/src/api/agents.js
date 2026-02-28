@@ -5,6 +5,7 @@ import { join } from 'path'
 import * as teamStore from '../store/teams.js'
 import { rewriteCompose, startAgentService } from '../orchestrator/compose.js'
 import { broadcastAgentStatus } from './ws.js'
+import { writeFifo } from '../orchestrator/fifo.js'
 import { TEAMS_DIR } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
@@ -114,20 +115,6 @@ async function ptySend(teamId, agentId, message) {
     '-e', `MSG=${message}`,
     serviceName, 'bash', '-c',
     'tmux send-keys -t agent C-u; sleep 0.1; tmux set-buffer -b _nudge "$MSG"; tmux paste-buffer -b _nudge -t agent; sleep 0.1; tmux send-keys -t agent -H 0d']
-  await execFileAsync('docker', args, { timeout: 15000 })
-}
-
-// ── Helper: write command to sidecar FIFO ────────────────────────────────────
-// The sidecar nudge_listener routes commands correctly based on agent mode:
-//   print-loop → writes to /tmp/agent-inbox.txt
-//   interactive → sends via tmux send-keys
-async function writeFifo(teamId, agentId, command) {
-  // Use env var to safely pass arbitrary payload without shell escaping issues
-  const serviceName = `agent-${agentId}`
-  const cf = composeFile(teamId)
-  const args = ['compose', '-f', cf, 'exec', '-T', '-u', 'agent',
-    '-e', `FIFO_CMD=${command}`,
-    serviceName, 'bash', '-c', 'printf "%s\\n" "$FIFO_CMD" > /tmp/nudge.fifo']
   await execFileAsync('docker', args, { timeout: 15000 })
 }
 

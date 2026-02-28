@@ -1,10 +1,5 @@
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { join } from 'path'
 import * as teamStore from '../store/teams.js'
-import { TEAMS_DIR } from '../constants.js'
-
-const execFileAsync = promisify(execFile)
+import { writeFifo } from '../orchestrator/fifo.js'
 
 const DEFAULT_IDLE_THRESHOLD = 300 // 5 min
 const DEFAULT_NUDGE_MSG = 'continue. check IRC with msg read, then resume your current task.'
@@ -12,7 +7,7 @@ const CHECK_INTERVAL = 15_000 // 15 seconds
 
 /**
  * Auto-nudge loop. Checks heartbeat staleness for all teams with autoNudge enabled.
- * Sends tmux keys to idle agents via docker exec.
+ * Sends nudge commands via FIFO sidecar (works for all agent modes).
  *
  * Does NOT run for teams where autoNudge.enabled === false (Chuck handles those).
  */
@@ -42,12 +37,7 @@ export function startNudger() {
 
         if (idleMs >= threshold) {
           try {
-            const cf = join(TEAMS_DIR, team.id, 'docker-compose.yml')
-            const serviceName = `agent-${agent.id}`
-            await execFileAsync('docker', [
-              'compose', '-f', cf, 'exec', '-T', serviceName,
-              'tmux', 'send-keys', '-t', 'agent', nudgeMsg, 'Enter',
-            ], { timeout: 10000 })
+            await writeFifo(team.id, agent.id, `nudge ${nudgeMsg}`)
             console.log(`[nudger] nudged ${agent.id} (idle ${Math.round(idleMs / 1000)}s)`)
           } catch (err) {
             console.warn(`[nudger] failed to nudge ${agent.id}: ${err.message}`)
