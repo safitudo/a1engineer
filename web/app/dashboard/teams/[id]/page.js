@@ -294,6 +294,12 @@ export default function TeamDetailPage() {
             <StatusBadge status={team?.status} />
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href={`/dashboard/teams/${id}/settings`}
+              className="text-sm text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#8b949e] px-3 py-1.5 rounded-md transition-colors"
+            >
+              ⚙ Settings
+            </Link>
             <button
               onClick={stopTeam}
               disabled={stopping || team?.status === 'stopped'}

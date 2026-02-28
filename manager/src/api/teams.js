@@ -87,7 +87,7 @@ router.patch('/:id', (req, res) => {
     teamStore.updateTeam(team.id, { tenantId: req.tenantId })
   }
 
-  const { name, auth } = req.body ?? {}
+  const { name, auth, channels } = req.body ?? {}
   const updates = {}
   if (name !== undefined) {
     if (typeof name !== 'string' || !name.trim()) {
@@ -100,6 +100,15 @@ router.patch('/:id', (req, res) => {
       return res.status(400).json({ error: 'auth must be an object', code: 'INVALID_AUTH' })
     }
     updates.auth = auth
+  }
+  if (channels !== undefined) {
+    if (!Array.isArray(channels) || channels.length === 0) {
+      return res.status(400).json({ error: 'channels must be a non-empty array', code: 'INVALID_CHANNELS' })
+    }
+    if (!channels.every((c) => typeof c === 'string' && c.startsWith('#') && c.length > 1)) {
+      return res.status(400).json({ error: 'each channel must start with # and have a name', code: 'INVALID_CHANNELS' })
+    }
+    updates.channels = channels
   }
 
   const updated = teamStore.updateTeam(req.params.id, updates)
