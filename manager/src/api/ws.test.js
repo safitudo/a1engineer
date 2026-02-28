@@ -309,6 +309,61 @@ describe('WebSocket console.* handlers', () => {
       ws.close()
       vi.useRealTimers()
     })
+
+    it('skips console.data when pane output is unchanged (deduplication)', async () => {
+      vi.useFakeTimers()
+      vi.mocked(execFileAsync).mockResolvedValue({ stdout: 'same output\n', stderr: '' })
+
+      const ws = await authenticatedWs()
+      const attachResp = await sendAndReceive(ws, { type: 'console.attach', teamId: testTeam.id, agentId: testAgent.id })
+      expect(attachResp.type).toBe('console.attached')
+
+      const received = []
+      ws.on('message', (raw) => {
+        const msg = JSON.parse(raw)
+        if (msg.type === 'console.data') received.push(msg)
+      })
+
+      // First tick — data is new → must send
+      await vi.advanceTimersByTimeAsync(500)
+      // Second tick — same data → must be skipped
+      await vi.advanceTimersByTimeAsync(500)
+
+      expect(received).toHaveLength(1)
+      expect(received[0].data).toBe('same output\n')
+
+      ws.close()
+      vi.useRealTimers()
+    })
+
+    it('sends console.data again when pane output changes', async () => {
+      vi.useFakeTimers()
+      vi.mocked(execFileAsync)
+        .mockResolvedValueOnce({ stdout: 'output-a\n', stderr: '' })
+        .mockResolvedValueOnce({ stdout: 'output-b\n', stderr: '' })
+
+      const ws = await authenticatedWs()
+      const attachResp = await sendAndReceive(ws, { type: 'console.attach', teamId: testTeam.id, agentId: testAgent.id })
+      expect(attachResp.type).toBe('console.attached')
+
+      const received = []
+      ws.on('message', (raw) => {
+        const msg = JSON.parse(raw)
+        if (msg.type === 'console.data') received.push(msg)
+      })
+
+      // First tick — output-a → send
+      await vi.advanceTimersByTimeAsync(500)
+      // Second tick — output-b (changed) → send again
+      await vi.advanceTimersByTimeAsync(500)
+
+      expect(received).toHaveLength(2)
+      expect(received[0].data).toBe('output-a\n')
+      expect(received[1].data).toBe('output-b\n')
+
+      ws.close()
+      vi.useRealTimers()
+    })
   })
 
   // ── console.input ───────────────────────────────────────────────────────────
