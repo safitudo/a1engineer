@@ -130,7 +130,7 @@ test.describe('Create Team wizard — step 0 (Template)', () => {
   })
 })
 
-// ── Steps 1–5 ─────────────────────────────────────────────────────────────────
+// ── Steps 1–4 ─────────────────────────────────────────────────────────────────
 
 test.describe('Create Team wizard — step 1 (Team)', () => {
   test('renders team name and repo URL inputs', async ({ page }) => {
@@ -175,45 +175,12 @@ test.describe('Create Team wizard — step 1 (Team)', () => {
   })
 })
 
-test.describe('Create Team wizard — step 2 (Runtime)', () => {
-  test('runtime selection is visible and selectable', async ({ page }) => {
-    await gotoWizard(page)
-
-    await page.getByPlaceholder('e.g. alpha-squad').fill('my-team')
-    await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
-
-    await expect(page.getByRole('heading', { name: 'Choose a runtime' })).toBeVisible()
-
-    const claudeCodeBtn = page.getByRole('button', { name: /Claude Code/ })
-    await expect(claudeCodeBtn).toBeVisible()
-    await claudeCodeBtn.click()
-
-    // Codex shows "coming soon" badge
-    await expect(page.getByText('coming soon')).toBeVisible()
-  })
-
-  test('Back button from step 2 returns to step 1', async ({ page }) => {
-    await gotoWizard(page)
-
-    await page.getByPlaceholder('e.g. alpha-squad').fill('my-team')
-    await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
-    await expect(page.getByRole('heading', { name: 'Choose a runtime' })).toBeVisible()
-
-    await page.getByRole('button', { name: '← Back' }).click()
-    await expect(page.getByRole('heading', { name: 'Name your team' })).toBeVisible()
-  })
-})
-
-test.describe('Create Team wizard — step 3 (Agents)', () => {
+test.describe('Create Team wizard — step 2 (Agents)', () => {
   test('can add and remove agents', async ({ page }) => {
     await gotoWizard(page)
 
     await page.getByPlaceholder('e.g. alpha-squad').fill('my-team')
     await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
-    await expect(page.getByRole('heading', { name: 'Choose a runtime' })).toBeVisible()
     await page.getByRole('button', { name: 'Next →' }).click()
 
     await expect(page.getByRole('heading', { name: 'Add agents' })).toBeVisible()
@@ -233,14 +200,12 @@ test.describe('Create Team wizard — step 3 (Agents)', () => {
   })
 })
 
-test.describe('Create Team wizard — step 4 (API Key)', () => {
+test.describe('Create Team wizard — step 3 (API Key)', () => {
   test('API key input with show/hide toggle and validation', async ({ page }) => {
     await gotoWizard(page)
 
     await page.getByPlaceholder('e.g. alpha-squad').fill('my-team')
     await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
-    await expect(page.getByRole('heading', { name: 'Choose a runtime' })).toBeVisible()
     await page.getByRole('button', { name: 'Next →' }).click()
     await expect(page.getByRole('heading', { name: 'Add agents' })).toBeVisible()
     await page.getByRole('button', { name: 'Next →' }).click()
@@ -263,14 +228,12 @@ test.describe('Create Team wizard — step 4 (API Key)', () => {
   })
 })
 
-test.describe('Create Team wizard — step 5 (Review & Launch)', () => {
-  // Helper: fill steps 1–4 and land on step 5
-  async function gotoStep5(page) {
+test.describe('Create Team wizard — step 4 (Review & Launch)', () => {
+  // Helper: fill steps 1–3 and land on step 4
+  async function gotoStep4(page) {
     await gotoWizard(page)
     await page.getByPlaceholder('e.g. alpha-squad').fill('my-team')
     await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
-    await expect(page.getByRole('heading', { name: 'Choose a runtime' })).toBeVisible()
     await page.getByRole('button', { name: 'Next →' }).click()
     await expect(page.getByRole('heading', { name: 'Add agents' })).toBeVisible()
     await page.getByRole('button', { name: 'Next →' }).click()
@@ -283,7 +246,7 @@ test.describe('Create Team wizard — step 5 (Review & Launch)', () => {
   }
 
   test('review shows filled values', async ({ page }) => {
-    await gotoStep5(page)
+    await gotoStep4(page)
 
     await expect(page.getByText('my-team')).toBeVisible()
     await expect(page.getByText('https://github.com/org/repo')).toBeVisible()
@@ -299,7 +262,7 @@ test.describe('Create Team wizard — step 5 (Review & Launch)', () => {
       })
     )
 
-    await gotoStep5(page)
+    await gotoStep4(page)
 
     const launchBtn = page.getByRole('button', { name: 'Launch team' })
     await expect(launchBtn).toBeVisible()
@@ -318,7 +281,7 @@ test.describe('Create Team wizard — step 5 (Review & Launch)', () => {
       })
     )
 
-    await gotoStep5(page)
+    await gotoStep4(page)
     await page.getByRole('button', { name: 'Launch team' }).click()
 
     await expect(page.getByText('Manager unavailable')).toBeVisible()
