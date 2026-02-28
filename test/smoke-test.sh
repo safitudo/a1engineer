@@ -246,7 +246,7 @@ MSG_RESP=$(curl -s -o /tmp/smoke-msg-resp.json -w "%{http_code}" \
   -H "Authorization: Bearer $SMOKE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"text":"smoke-test ping"}' \
-  "http://localhost:$MANAGER_PORT/api/teams/$TEAM_ID/channels/%23main/messages")
+  "http://localhost:$MANAGER_PORT/api/teams/$TEAM_ID/channels/main/messages")
 
 if [[ "$MSG_RESP" == "200" ]]; then
   pass 6 "POST /channels/#main/messages → 200"
