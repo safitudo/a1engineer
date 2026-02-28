@@ -1,29 +1,29 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8080'
+import { useTeamWS } from './TeamWSProvider'
 
 /**
- * AgentConsole — Phase 3 interactive terminal.
- * Connects to Manager WS (/ws), sends console.attach to stream tmux output
- * via xterm.js, and forwards keystrokes via console.input.
+ * AgentConsole — Phase 3 interactive terminal (shared WS via TeamWSProvider).
+ * Uses useTeamWS() context for attachConsole/detachConsole/sendInput/resizeConsole
+ * instead of managing its own WebSocket connection.
  *
  * Props: { teamId, agentId, onClose }
  */
 export default function AgentConsole({ teamId, agentId, onClose }) {
   const containerRef = useRef(null)
+  const { attachConsole, detachConsole, sendInput, resizeConsole, addListener } = useTeamWS()
 
   useEffect(() => {
     if (!containerRef.current) return
 
     let terminal = null
     let fitAddon = null
-    let ws = null
-    let attached = false
     let disposed = false
+    let attached = false
     let lastData = null
-    let dataDisposable = null
+    let dataUnsubscribe = null
+    let attachedUnsubscribe = null
     let observer = null
 
     async function init() {
@@ -32,7 +32,6 @@ export default function AgentConsole({ teamId, agentId, onClose }) {
         import('@xterm/xterm'),
         import('@xterm/addon-fit'),
       ])
-      // Load xterm CSS once
       await import('@xterm/xterm/css/xterm.css')
 
       if (disposed) return
@@ -54,107 +53,51 @@ export default function AgentConsole({ teamId, agentId, onClose }) {
       terminal.open(containerRef.current)
       fitAddon.fit()
 
-      // Forward keystrokes to tmux via WS
-      dataDisposable = terminal.onData((data) => {
-        if (ws?.readyState === WebSocket.OPEN && attached) {
-          ws.send(JSON.stringify({ type: 'console.input', agentId, data }))
-        }
+      // Listen for console.attached to know when streaming starts
+      attachedUnsubscribe = addListener('console.attached', (msg) => {
+        if (msg.agentId !== agentId) return
+        attached = true
+        terminal.clear()
       })
 
-      // Resize terminal when container size changes
+      // Listen for console.data frames — full tmux snapshot every 500ms
+      dataUnsubscribe = addListener('console.data', (msg) => {
+        if (msg.agentId !== agentId || !terminal) return
+        if (msg.data === lastData) return
+        lastData = msg.data
+        // Overwrite visible area, preserve scrollback
+        terminal.write('\x1b[2J\x1b[H')
+        terminal.write(msg.data)
+      })
+
+      // Forward keystrokes to tmux via shared WS
+      terminal.onData((data) => {
+        if (attached) sendInput(agentId, data)
+      })
+
+      // Resize terminal when container changes — notify server via shared WS
       observer = new ResizeObserver(() => {
         if (!terminal || !fitAddon) return
         try { fitAddon.fit() } catch { /* container may be hidden */ }
-        const { cols, rows } = terminal
-        if (ws?.readyState === WebSocket.OPEN && attached) {
-          ws.send(JSON.stringify({ type: 'console.resize', agentId, cols, rows }))
-        }
+        if (attached) resizeConsole(agentId, terminal.cols, terminal.rows)
       })
       observer.observe(containerRef.current)
 
-      terminal.writeln('\x1b[90mConnecting…\x1b[0m')
-
-      // Fetch WS token (bridges httpOnly cookie)
-      let token
-      try {
-        const res = await fetch('/api/auth/ws-token')
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        ;({ token } = await res.json())
-      } catch (err) {
-        terminal.writeln(`\x1b[31m[error] Failed to get token: ${err.message}\x1b[0m`)
-        return
-      }
-
-      if (disposed) return
-
-      ws = new WebSocket(`${WS_BASE}/ws`)
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'auth', token }))
-      }
-
-      ws.onmessage = (event) => {
-        let msg
-        try { msg = JSON.parse(event.data) } catch { return }
-
-        switch (msg.type) {
-          case 'authenticated':
-            ws.send(JSON.stringify({ type: 'console.attach', teamId, agentId }))
-            break
-
-          case 'console.attached':
-            attached = true
-            terminal.clear()
-            break
-
-          case 'console.data': {
-            if (msg.data === lastData) break
-            lastData = msg.data
-            // Full tmux snapshot — overwrite visible area, preserve scrollback
-            terminal.write('\x1b[2J\x1b[H')
-            terminal.write(msg.data)
-            break
-          }
-
-          case 'console.detached':
-            attached = false
-            terminal.writeln('\r\n\x1b[33m[detached]\x1b[0m')
-            break
-
-          case 'error':
-            terminal.writeln(`\r\n\x1b[31m[error] ${msg.code}: ${msg.message}\x1b[0m`)
-            break
-        }
-      }
-
-      ws.onclose = () => {
-        if (!disposed && terminal) {
-          terminal.writeln('\r\n\x1b[33m[disconnected]\x1b[0m')
-        }
-      }
-
-      ws.onerror = () => {
-        if (terminal) terminal.writeln('\r\n\x1b[31m[connection error]\x1b[0m')
-      }
+      terminal.writeln('\x1b[90mAttaching…\x1b[0m')
+      attachConsole(teamId, agentId)
     }
 
     init()
 
     return () => {
       disposed = true
-      dataDisposable?.dispose()
+      dataUnsubscribe?.()
+      attachedUnsubscribe?.()
       observer?.disconnect()
-      if (ws) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'console.detach', agentId }))
-          ws.close()
-        } else {
-          ws.close()
-        }
-      }
+      detachConsole(agentId)
       terminal?.dispose()
     }
-  }, [teamId, agentId])
+  }, [teamId, agentId, attachConsole, detachConsole, sendInput, resizeConsole, addListener])
 
   return (
     <div className="bg-[#010409] border border-[#30363d] rounded-lg flex flex-col overflow-hidden">
