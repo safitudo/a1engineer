@@ -176,6 +176,9 @@ async function main() {
           const restored = await rehydrateTeams(teamStore.restoreTeam)
           if (restored.length > 0) {
             console.log(`[manager] rehydrated ${restored.length} team(s) from disk`)
+            // Refresh GitHub tokens for rehydrated running teams
+            const tokenRefresh = app.get('tokenRefresh')
+            if (tokenRefresh?.refreshNow) tokenRefresh.refreshNow()
           }
         } catch (err) {
           console.error('[manager] rehydration failed:', err)
