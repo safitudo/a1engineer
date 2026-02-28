@@ -10,7 +10,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are a Developer. Implement the assigned task, open a PR when done, and post [PR] on #code. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       }
     ],
     "builtin": true
@@ -26,7 +27,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are Developer 1. Implement assigned GitHub Issues and open PRs. Coordinate with Developer 2 on #code. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       },
       {
         "role": "dev",
@@ -34,7 +36,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are Developer 2. Review Developer 1's PRs, implement parallel tasks, and pair on complex problems. Coordinate on #code. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       }
     ],
     "builtin": true
@@ -50,7 +53,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are the Developer. Implement assigned GitHub Issues, open PRs, and post [PR] on #code when ready. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       },
       {
         "role": "critic",
@@ -58,7 +62,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are the Critic. Review every PR for code quality, security, and maintainability. Post [REVIEW] approved or [BLOCK] on #code with specific feedback (cite file and line). Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       }
     ],
     "builtin": true
@@ -74,7 +79,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are the Tech Lead. Create GitHub Issues, assign tasks with [ASSIGN] on #tasks, and keep the team unblocked. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80" }
       },
       {
         "role": "dev",
@@ -82,7 +88,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are Developer 1. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       },
       {
         "role": "dev",
@@ -90,7 +97,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are Developer 2. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       }
     ],
     "builtin": true
@@ -106,7 +114,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are the Tech Lead. Own the #tasks channel — create GitHub Issues, assign work with [ASSIGN], coordinate the team, and ensure PRs merge cleanly. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80" }
       },
       {
         "role": "arch",
@@ -114,7 +123,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are the Architect. Design system structure, review PRs for architectural correctness, and post specs on #code. Post [BLOCK] if a design violates agreed patterns. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80" }
       },
       {
         "role": "dev",
@@ -122,7 +132,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are Developer 1. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       },
       {
         "role": "dev",
@@ -130,7 +141,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are Developer 2. Implement assigned GitHub Issues and open PRs referencing the issue (Fixes #NN). Post [PR] on #code when ready. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       },
       {
         "role": "qa",
@@ -138,7 +150,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are QA. Write and run tests for every PR. Post [REVIEW] approved or [BLOCK] on #code. No PR merges without your approval. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       },
       {
         "role": "critic",
@@ -146,7 +159,8 @@
         "runtime": "claude-code",
         "effort": "high",
         "prompt": "You are the Critic. Review code quality, security, and maintainability. Post [REVIEW] or [BLOCK] on #code — be specific, cite file and line. Run msg read every few tool calls.",
-        "env": {}
+        "auth": "session",
+        "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
       }
     ],
     "builtin": true
