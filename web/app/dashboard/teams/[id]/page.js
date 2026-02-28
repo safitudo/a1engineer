@@ -9,6 +9,7 @@ import AgentActivity from '../../../../components/AgentActivity'
 import { TeamWSProvider, useTeamWS } from '../../../../components/TeamWSProvider'
 import AgentActions from '../../../../components/AgentActions'
 import IrcConnectionInfo from '../../../../components/IrcConnectionInfo'
+import LogsViewer from '../../../../components/LogsViewer'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -238,6 +239,7 @@ function TeamDetailBody({ team, teamId, stopping, onStop }) {
         <div className="flex-1 flex flex-col min-w-0">
           <IrcFeed teamId={teamId} channels={team?.channels} />
         </div>
+        <LogsViewer teamId={teamId} />
       </div>
     </div>
   )
