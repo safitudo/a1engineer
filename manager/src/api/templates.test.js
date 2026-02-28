@@ -179,7 +179,7 @@ describe('template content', () => {
     const res = await get(port, '/api/templates/full-team')
     for (const agent of res.body.agents) {
       if (agent.role === 'lead' || agent.role === 'arch') {
-        expect(agent.model).toContain('opus')
+        expect(agent.model).toBe('opus')
       }
     }
   })
