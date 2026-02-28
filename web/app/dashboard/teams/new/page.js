@@ -12,10 +12,9 @@ const RUNTIMES = [
 ]
 
 const MODELS = [
-  { id: '', label: 'Default (claude-sonnet-4-6)' },
-  { id: 'claude-opus-4-6', label: 'claude-opus-4-6' },
-  { id: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
-  { id: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5-20251001' },
+  { id: 'sonnet', label: 'sonnet (default)' },
+  { id: 'opus', label: 'opus' },
+  { id: 'haiku', label: 'haiku' },
 ]
 
 const STEPS = ['Template', 'Team', 'Runtime', 'Agents', 'API Key', 'Review']
@@ -26,7 +25,7 @@ const CUSTOM_TEMPLATE = {
   name: 'Custom',
   description: 'Start from scratch with a blank configuration.',
   runtime: 'claude-code',
-  agents: [{ role: 'dev', model: '', prompt: '' }],
+  agents: [{ role: 'dev', model: 'sonnet', prompt: '' }],
   tags: [],
 }
 
@@ -287,7 +286,7 @@ function Step2({ runtime, setRuntime }) {
 // Step 3: Add agents (free-text role with datalist, per-agent prompt)
 function Step3({ agents, setAgents, error }) {
   function addAgent() {
-    setAgents([...agents, { role: 'dev', model: '', prompt: '' }])
+    setAgents([...agents, { role: 'dev', model: 'sonnet', prompt: '' }])
   }
 
   function removeAgent(i) {
@@ -512,7 +511,7 @@ export default function NewTeamPage() {
   const [name, setName] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
   const [runtime, setRuntime] = useState('claude-code')
-  const [agents, setAgents] = useState([{ role: 'dev', model: '', prompt: '' }])
+  const [agents, setAgents] = useState([{ role: 'dev', model: 'sonnet', prompt: '' }])
   const [apiKey, setApiKey] = useState('')
 
   const [error, setError] = useState(null)
@@ -535,7 +534,7 @@ export default function NewTeamPage() {
       setAgents(
         (t.agents ?? []).map((a) => ({
           role: a.role ?? 'dev',
-          model: a.model ?? '',
+          model: a.model ?? 'sonnet',
           prompt: a.prompt ?? '',
         }))
       )
