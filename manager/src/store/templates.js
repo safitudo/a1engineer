@@ -1,9 +1,9 @@
 // WARNING: Templates must not contain secrets.
 // The agent env field is for non-sensitive config only (e.g. CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).
-import { readFile, writeFile, mkdir, readdir, access } from 'fs/promises'
+import { readFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { TEAMS_DIR } from '../constants.js'
+import { getDb } from './db.js'
 
 const DATA_FILE = join(dirname(fileURLToPath(import.meta.url)), '../../data/templates.json')
 
@@ -11,14 +11,6 @@ const DATA_FILE = join(dirname(fileURLToPath(import.meta.url)), '../../data/temp
 
 /** @type {Map<string, object>} */
 let builtinStore = new Map()
-
-/**
- * Per-tenant custom templates.
- * Map<tenantId, Map<templateId, template>>
- */
-const tenantStore = new Map()
-
-// ── Builtin templates ──────────────────────────────────────────────────────
 
 export async function loadTemplates() {
   try {
@@ -28,6 +20,21 @@ export async function loadTemplates() {
     console.log(`[templates] loaded ${builtinStore.size} builtin template(s)`)
   } catch (err) {
     console.warn('[templates] failed to load templates.json:', err.message)
+  }
+}
+
+// ── Row hydration ─────────────────────────────────────────────────────────────
+
+function rowToTemplate(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    agents: JSON.parse(row.agents),
+    builtin: false,
+    tenantId: row.tenant_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
 }
 
@@ -53,8 +60,8 @@ export function getTemplate(id, tenantId = null) {
   const builtin = builtinStore.get(id)
   if (builtin) return builtin
   if (!tenantId) return null
-  const tenantMap = tenantStore.get(tenantId)
-  return tenantMap?.get(id) ?? null
+  const row = getDb().prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').get(id, tenantId)
+  return row ? rowToTemplate(row) : null
 }
 
 // ── Tenant CRUD ────────────────────────────────────────────────────────────
@@ -67,7 +74,7 @@ function generateId(tenantId, name) {
   const base = slugify(name) || 'template'
   let id = base
   let i = 2
-  while (builtinStore.has(id) || tenantStore.get(tenantId)?.has(id)) {
+  while (builtinStore.has(id) || getDb().prepare('SELECT 1 FROM templates WHERE id = ?').get(id)) {
     id = `${base}-${i++}`
   }
   return id
@@ -103,6 +110,7 @@ export async function createTemplate(tenantId, data) {
   if (agentError) return { error: agentError }
 
   const id = generateId(tenantId, name.trim())
+  const now = new Date().toISOString()
   const template = {
     id,
     name: name.trim(),
@@ -117,13 +125,15 @@ export async function createTemplate(tenantId, data) {
     })),
     builtin: false,
     tenantId,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   }
 
-  if (!tenantStore.has(tenantId)) tenantStore.set(tenantId, new Map())
-  tenantStore.get(tenantId).set(id, template)
-  await persistTenantTemplates(tenantId)
+  getDb().prepare(`
+    INSERT INTO templates (id, tenant_id, name, description, agents, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, tenantId, template.name, template.description, JSON.stringify(template.agents), template.createdAt, template.updatedAt)
+
   return { template }
 }
 
@@ -139,11 +149,11 @@ export async function updateTemplate(tenantId, id, updates) {
   if (builtinStore.has(id)) {
     return { error: 'builtin templates are read-only', code: 'FORBIDDEN' }
   }
-  const tenantMap = tenantStore.get(tenantId)
-  const existing = tenantMap?.get(id)
-  if (!existing) {
+  const row = getDb().prepare('SELECT * FROM templates WHERE id = ? AND tenant_id = ?').get(id, tenantId)
+  if (!row) {
     return { error: 'template not found', code: 'NOT_FOUND' }
   }
+  const existing = rowToTemplate(row)
 
   const { name, description, agents } = updates ?? {}
 
@@ -171,8 +181,12 @@ export async function updateTemplate(tenantId, id, updates) {
     }),
     updatedAt: new Date().toISOString(),
   }
-  tenantMap.set(id, updated)
-  await persistTenantTemplates(tenantId)
+
+  getDb().prepare(`
+    UPDATE templates SET name = ?, description = ?, agents = ?, updated_at = ?
+    WHERE id = ? AND tenant_id = ?
+  `).run(updated.name, updated.description, JSON.stringify(updated.agents), updated.updatedAt, id, tenantId)
+
   return { template: updated }
 }
 
@@ -187,78 +201,49 @@ export async function deleteTemplate(tenantId, id) {
   if (builtinStore.has(id)) {
     return { error: 'builtin templates are read-only', code: 'FORBIDDEN' }
   }
-  const tenantMap = tenantStore.get(tenantId)
-  if (!tenantMap?.has(id)) {
+  const row = getDb().prepare('SELECT 1 FROM templates WHERE id = ? AND tenant_id = ?').get(id, tenantId)
+  if (!row) {
     return { error: 'template not found', code: 'NOT_FOUND' }
   }
-  tenantMap.delete(id)
-  await persistTenantTemplates(tenantId)
+  getDb().prepare('DELETE FROM templates WHERE id = ? AND tenant_id = ?').run(id, tenantId)
   return { ok: true }
 }
 
 // ── Persistence ────────────────────────────────────────────────────────────
 
 /**
- * Get all custom templates for a tenant (used by persistence layer).
+ * Get all custom templates for a tenant.
  */
 export function getTenantTemplates(tenantId) {
-  const tenantMap = tenantStore.get(tenantId)
-  if (!tenantMap) return []
-  return Array.from(tenantMap.values())
+  return getDb().prepare('SELECT * FROM templates WHERE tenant_id = ?').all(tenantId).map(rowToTemplate)
 }
 
 /**
- * Restore persisted custom templates for a tenant (called on startup).
+ * Restore persisted custom templates for a tenant (called on startup / import).
  */
 export function restoreTenantTemplates(tenantId, templates) {
-  tenantStore.set(tenantId, new Map(templates.map((t) => [t.id, t])))
-}
-
-function tenantTemplatesPath(tenantId) {
-  return join(TEAMS_DIR, tenantId, 'templates.json')
-}
-
-async function persistTenantTemplates(tenantId) {
-  const templates = getTenantTemplates(tenantId)
-  const dir = join(TEAMS_DIR, tenantId)
-  await mkdir(dir, { recursive: true })
-  await writeFile(tenantTemplatesPath(tenantId), JSON.stringify(templates, null, 2), 'utf8')
-}
-
-export async function loadTenantTemplates(tenantId) {
-  try {
-    const raw = await readFile(tenantTemplatesPath(tenantId), 'utf8')
-    const arr = JSON.parse(raw)
-    restoreTenantTemplates(tenantId, arr.filter((t) => t.id))
-  } catch {
-    // File doesn't exist yet — start empty
-    if (!tenantStore.has(tenantId)) tenantStore.set(tenantId, new Map())
+  const stmt = getDb().prepare(`
+    INSERT OR REPLACE INTO templates (id, tenant_id, name, description, agents, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const t of templates) {
+    stmt.run(t.id, tenantId, t.name, t.description ?? '', JSON.stringify(t.agents ?? []), t.createdAt, t.updatedAt)
   }
 }
 
 /**
- * Scan TEAMS_DIR for per-tenant templates.json files and load them.
- * Call once on server startup after teams are rehydrated.
- * Returns array of tenantIds that were loaded.
+ * No-op: SQLite persists across restarts, no file loading needed.
+ */
+export async function loadTenantTemplates(_tenantId) {
+  // SQLite persists across restarts — nothing to do
+}
+
+/**
+ * No-op: SQLite persists across restarts, no directory scan needed.
+ * Returns empty array for startup compatibility.
  */
 export async function rehydrateTenantTemplates() {
-  let dirs
-  try {
-    dirs = await readdir(TEAMS_DIR)
-  } catch {
-    return []
-  }
-  const loaded = []
-  for (const dir of dirs) {
-    try {
-      await access(tenantTemplatesPath(dir))
-      await loadTenantTemplates(dir)
-      loaded.push(dir)
-    } catch {
-      // No templates.json for this tenant dir — skip
-    }
-  }
-  return loaded
+  return []
 }
 
 // Load builtins on startup
