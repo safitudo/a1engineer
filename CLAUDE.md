@@ -114,7 +114,8 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **Sidebar Layout** (`web/app/dashboard/layout.js`) — Navigation layout wrapping dashboard pages
 - **IrcFeed Component** (`web/components/IrcFeed.js`) — WebSocket IRC feed, connects directly to Manager:8080/ws (not through Next.js proxy). MAX_MESSAGES=500
 - **Team Detail Page** (`web/app/dashboard/teams/[id]/page.js`) — Uses IrcFeed component, correct WS URL
-- **AgentConsole Component** (`web/components/AgentConsole.js`) — Phase 2 read-only. Polls GET /api/teams/:id/agents/:agentId/screen every 2s. Click agent card to expand/collapse console output
+- **AgentConsole Component** (`web/components/AgentConsole.js`) — Phase 3 interactive terminal via xterm.js + WS console protocol. Uses TeamWSProvider shared context
+- **TeamWSProvider** (`web/components/TeamWSProvider.js`) — Shared authenticated WS context for IrcFeed + AgentConsole. Exponential backoff reconnect, opaque token auth
 - **Login Page** (`web/app/login/page.js`) — Paste API key → set httpOnly cookie → redirect to dashboard
 - **Route Handler Proxy** (`web/app/api/[...path]/route.js`) — Replaces Next.js rewrites. Reads cookie, injects Authorization: Bearer header, forwards to Manager
 - **Edge Middleware** (`web/middleware.js`) — Redirects unauthenticated /dashboard/* requests to /login
@@ -125,16 +126,18 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **Tenant Auth Middleware** (`manager/src/middleware/auth.js`) — Bearer token auth on all /api/teams routes, BYOK auto-provisioning via upsertTenant, heartbeat endpoint exempt
 - **Tenant Store** (`manager/src/store/tenants.js`) — In-memory Map, same pattern as teams.js
 - **Auth Endpoints** (`manager/src/api/auth.js`) — POST /api/auth/login validates Bearer token
-- **WebSocket Auth** — First-message auth protocol (token in WS frame, not URL). findByApiKey rejects unknown keys
+- **WebSocket Auth** — First-message auth protocol (opaque token or API key). validateWsToken for single-use tokens, findByApiKey fallback
+- **WS Opaque Token** (`manager/src/api/auth.js`) — POST /api/auth/ws-token generates single-use 60s TTL tokens (randomBytes(32)), prevents API key exposure to client JS
 - **IRC Channel Send** — POST /channels/:name/messages now works (was 501 stub), uses IrcGateway.say()
 - **Team Store Rehydration** — Writes team-meta.json on create, scans TEAMS_DIR on startup to rebuild store. POST /api/teams/rehydrate endpoint
 - **Signup Flow** — POST /api/auth/signup with randomUUID tenant + hashed key storage
-- **Playwright E2E Tests** — Login, dashboard, wizard flows (web/e2e/)
+- **E2E Agent Harness** (`manager/src/e2e/agent-harness.test.js`) — node:test-based, 5 scenarios covering team lifecycle
 
 **Tests**
-- 98 unit/integration tests passing (7 test files)
+- 142 unit/integration tests passing (9 test files)
+- E2E agent harness (node:test, separate from vitest — excluded via vitest.config.js)
 - Test mocks for IRC gateway and router (prevent real TCP connections)
-- WS auth handshake coverage (auth/UNAUTHENTICATED/MISSING_TOKEN paths)
+- WS auth handshake + opaque token coverage
 
 ### Architecture Decisions
 - **BYOK (Bring Your Own Key)** — Users provide their own API keys, no managed billing
@@ -149,22 +152,23 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 **P0 — DONE** ~~#61 Team store rehydration~~ — Merged. team-meta.json written on create, TEAMS_DIR scanned on startup.
 **P1 — DONE** ~~#62 Tenant ID collision~~ — Fixed via sha256(fullApiKey). ~~#63 WS auth bypass~~ — Fixed: findByApiKey rejects unknown keys. ~~#64 API key in WS URL~~ — Fixed: first-message auth protocol.
 
-**P2 — In Progress**
-1. **Phase 3 AgentConsole Backend** — WS handlers: console.attach/input/detach/resize via existing /ws. Assigned to dev-4.
-2. **Phase 3 AgentConsole Frontend** — xterm.js replacing polling AgentConsole. Assigned to dev-3. Depends on backend.
-3. **IRC client URL for users** — Expose Ergo connection details in team detail UI. Assigned to dev-5.
+**P2 — DONE** ~~Phase 3 AgentConsole~~ — Backend (WS handlers), Frontend (xterm.js), TeamWSProvider (shared context), WS opaque token all merged.
+
+**P3 — In Progress**
+1. **#97 AgentConsole console.detached + error listeners** — Small follow-up from PR #96 review. Assigned to dev-3.
+2. **wsTokenStore cleanup sweep** — setInterval to delete expired tokens. Assigned to dev-4.
+3. **Playwright E2E tests for web UI** — Login, dashboard, wizard flows. Priority from Stanislav. Assigned to dev-5.
 4. **PR #50 PostgreSQL store** — Blocked: tests need async update. Parked.
 
 ### Current Assignments
 | Agent | Issue | Task | Status |
 |-------|-------|------|--------|
 | arch | — | Architecture, reviewing | Available |
-| dev-3 | — | AgentConsole Phase 3 Frontend (xterm.js) | Assigned |
-| dev-4 | — | AgentConsole Phase 3 Backend (WS handlers) | Assigned |
-| dev-5 | — | IRC connection details in UI | Assigned |
+| dev-3 | #97 | AgentConsole console.detached + error listeners | Assigned |
+| dev-4 | — | wsTokenStore cleanup sweep | Assigned |
+| dev-5 | — | Playwright E2E tests (web UI) | ACK'd, in progress |
 | critic-7 | — | Reviewing PRs | Monitoring |
 | qa-6 | — | Testing, monitoring | Monitoring |
 
 ### Known Issues
-- GitHub token expiration blocked pushes mid-sprint (resolved by Stanislav)
 - PR #50 (PostgreSQL) blocked — tests use sync API but store is async
