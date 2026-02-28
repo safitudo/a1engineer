@@ -150,13 +150,14 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **CI Workflow** — PR #149
 - **SQLite Phase 1-2 (teams.js)** — PR #150
 - **SQLite Phase 3 (tenants.js)** — PR #151
+- **SQLite Phase 4-5 (templates.js + cleanup)** — M1 complete
 
 ### Roadmap
 
-**M1 — Complete SQLite Migration (current)**
-- Phase 4: templates.js — migrate builtinStore + tenantStore Maps to SQLite (dev-4, in progress)
-- Phase 5: cleanup — strip keyHash from findByApiKey/upsertTenant return values, remove dead Map imports, final pass
-- Deliverable: zero in-memory Maps for persistent state
+**M1 — Complete SQLite Migration — DONE**
+- Phase 4: templates.js — custom templates in SQLite, builtins from JSON (read-only Map, appropriate)
+- Phase 5: cleanup — stripped apiKey from findByApiKey/upsertTenant return values, verified zero dead Map imports
+- Deliverable: zero in-memory Maps for persistent state ✓ (builtinStore is read-only runtime cache, not persistent state)
 
 **M2 — Decouple Communication Channels**
 Goal: channels as first-class entities, not team-embedded arrays. IRC first, later Slack/Discord.
