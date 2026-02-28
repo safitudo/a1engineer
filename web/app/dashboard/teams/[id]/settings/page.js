@@ -110,10 +110,16 @@ function ChannelsSection({ team, onSaved }) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(null)
 
+  const isRunning = team.status === 'running'
+
   async function save() {
     const parsed = value.split(',').map((c) => c.trim()).filter((c) => c.startsWith('#') && c.length > 1)
     if (parsed.length === 0) {
       setError('At least one valid channel (e.g. #main) is required.')
+      return
+    }
+    if (parsed.length > 20) {
+      setError('Maximum 20 channels allowed.')
       return
     }
     setSaving(true)
@@ -143,20 +149,33 @@ function ChannelsSection({ team, onSaved }) {
   return (
     <Section title="Channels">
       <div className="flex flex-col gap-4 max-w-md">
+        {isRunning && (
+          <div className="flex items-center gap-2 bg-[#d29922]/10 border border-[#d29922]/30 rounded-md px-3 py-2 text-xs text-[#d29922] font-mono">
+            <span>⚠</span>
+            <span>Channel changes require a stopped team. Stop the team first, then edit channels.</span>
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm text-[#8b949e] font-medium">IRC channels</label>
           <input
             type="text"
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            disabled={isRunning}
             placeholder="#main, #tasks, #code, #testing, #merges"
-            className="bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-sm text-[#e6edf3] placeholder-[#8b949e]/50 focus:outline-none focus:border-[#3fb950] transition-colors font-mono"
+            className="bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-sm text-[#e6edf3] placeholder-[#8b949e]/50 focus:outline-none focus:border-[#3fb950] transition-colors font-mono disabled:opacity-50 disabled:cursor-not-allowed"
           />
-          <p className="text-xs text-[#8b949e]">Comma-separated channel names with # prefix. Min 1 channel.</p>
+          <p className="text-xs text-[#8b949e]">Comma-separated channel names with # prefix. Min 1, max 20 channels.</p>
         </div>
         {error && <p className="text-xs text-[#f85149] font-mono">{error}</p>}
         <div>
-          <SaveButton onClick={save} saving={saving} saved={saved} />
+          <button
+            onClick={save}
+            disabled={saving || isRunning}
+            className="px-4 py-2 text-sm font-mono rounded-md bg-[#3fb950]/10 border border-[#3fb950]/40 text-[#3fb950] hover:bg-[#3fb950]/20 hover:border-[#3fb950] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
+          </button>
         </div>
       </div>
     </Section>

@@ -260,6 +260,39 @@ describe('PATCH /api/teams/:id', () => {
     expect(res.status).toBe(400)
     expect(res.body.code).toBe('INVALID_AUTH')
   })
+
+  it('updates channels', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const res = await patch(port, `/api/teams/${teamId}`, { channels: ['#main', '#ops'] })
+    expect(res.status).toBe(200)
+    expect(res.body.channels).toEqual(['#main', '#ops'])
+  })
+
+  it('returns 400 when channels is empty array', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const res = await patch(port, `/api/teams/${teamId}`, { channels: [] })
+    expect(res.status).toBe(400)
+    expect(res.body.code).toBe('INVALID_CHANNELS')
+  })
+
+  it('returns 400 when channel is missing # prefix', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const res = await patch(port, `/api/teams/${teamId}`, { channels: ['main'] })
+    expect(res.status).toBe(400)
+    expect(res.body.code).toBe('INVALID_CHANNELS')
+  })
+
+  it('returns 400 when channels exceeds 20', async () => {
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+    const channels = Array.from({ length: 21 }, (_, i) => `#ch${i}`)
+    const res = await patch(port, `/api/teams/${teamId}`, { channels })
+    expect(res.status).toBe(400)
+    expect(res.body.code).toBe('INVALID_CHANNELS')
+  })
 })
 
 // ── DELETE /api/teams/:id ─────────────────────────────────────────────────────

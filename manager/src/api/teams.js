@@ -108,6 +108,9 @@ router.patch('/:id', (req, res) => {
     if (!channels.every((c) => typeof c === 'string' && c.startsWith('#') && c.length > 1)) {
       return res.status(400).json({ error: 'each channel must start with # and have a name', code: 'INVALID_CHANNELS' })
     }
+    if (channels.length > 20) {
+      return res.status(400).json({ error: 'maximum 20 channels allowed', code: 'INVALID_CHANNELS' })
+    }
     updates.channels = channels
   }
 
