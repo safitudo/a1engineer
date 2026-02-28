@@ -1,13 +1,12 @@
 /**
  * E2E tests for template selection in the Create Team wizard.
  *
- * These tests are skipped until TMPL-3 (wizard integration) is implemented.
  * TMPL-3 wires template selection UI into the wizard so that choosing a
  * builtin template pre-populates the agents step.
  *
- * Expected flow once TMPL-3 lands:
- *   1. Wizard step 1 (or step 3) shows a "Use template" option or template picker
- *   2. User selects a builtin template (e.g. "Full-stack team")
+ * Flow:
+ *   1. Wizard step 0 shows a template picker
+ *   2. User selects a builtin template (e.g. "Full-stack team") and clicks Next
  *   3. Agents step is pre-populated with the template's agent roster
  *   4. User can still edit the pre-populated agents before launching
  */
@@ -49,48 +48,44 @@ const SOLO_TEMPLATE = {
 }
 
 test.describe('Template selection in Create Team wizard', () => {
-  // TODO: remove .skip once TMPL-3 (wizard integration) is merged
-  test.skip('wizard shows template picker', async ({ page }) => {
+  test('wizard shows template picker', async ({ page }) => {
     await authenticate(page)
     await page.route('/api/templates', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([FULLSTACK_TEMPLATE, SOLO_TEMPLATE]),
+        body: JSON.stringify({ templates: [FULLSTACK_TEMPLATE, SOLO_TEMPLATE] }),
       })
     )
 
     await page.goto('/dashboard/teams/new')
     await page.waitForLoadState('networkidle')
 
-    // Template picker should be visible somewhere in the wizard
-    // (exact placement determined by TMPL-3 implementation)
+    // Template picker is visible on step 0
     await expect(page.getByText('Full-stack team')).toBeVisible()
     await expect(page.getByText('Solo dev')).toBeVisible()
   })
 
-  // TODO: remove .skip once TMPL-3 (wizard integration) is merged
-  test.skip('selecting a template pre-populates agents step', async ({ page }) => {
+  test('selecting a template pre-populates agents step', async ({ page }) => {
     await authenticate(page)
     await page.route('/api/templates', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([FULLSTACK_TEMPLATE, SOLO_TEMPLATE]),
+        body: JSON.stringify({ templates: [FULLSTACK_TEMPLATE, SOLO_TEMPLATE] }),
       })
     )
 
     await page.goto('/dashboard/teams/new')
     await page.waitForLoadState('networkidle')
 
-    // Select the Full-stack template
+    // Select the Full-stack template then advance to step 1 (Team)
     await page.getByRole('button', { name: 'Full-stack team' }).click()
+    await page.getByRole('button', { name: 'Next →' }).click()
 
-    // Advance to the agents step (step 3)
+    // Advance to the agents step (step 2)
     await page.getByPlaceholder('e.g. alpha-squad').fill('my-team')
     await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
-    await expect(page.getByRole('heading', { name: 'Choose a runtime' })).toBeVisible()
     await page.getByRole('button', { name: 'Next →' }).click()
 
     // Agents step: template should have pre-populated 4 agents
@@ -101,27 +96,26 @@ test.describe('Template selection in Create Team wizard', () => {
     await expect(page.getByText('Agent 4')).toBeVisible()
   })
 
-  // TODO: remove .skip once TMPL-3 (wizard integration) is merged
-  test.skip('pre-populated agents from template are editable', async ({ page }) => {
+  test('pre-populated agents from template are editable', async ({ page }) => {
     await authenticate(page)
     await page.route('/api/templates', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([SOLO_TEMPLATE]),
+        body: JSON.stringify({ templates: [SOLO_TEMPLATE] }),
       })
     )
 
     await page.goto('/dashboard/teams/new')
     await page.waitForLoadState('networkidle')
 
-    // Select solo template (1 agent pre-populated)
+    // Select solo template (1 agent pre-populated) then advance to step 1 (Team)
     await page.getByRole('button', { name: 'Solo dev' }).click()
+    await page.getByRole('button', { name: 'Next →' }).click()
 
-    // Navigate to agents step
+    // Navigate to agents step (step 2)
     await page.getByPlaceholder('e.g. alpha-squad').fill('solo-test')
     await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
     await page.getByRole('button', { name: 'Next →' }).click()
     await expect(page.getByRole('heading', { name: 'Add agents' })).toBeVisible()
 
@@ -132,28 +126,27 @@ test.describe('Template selection in Create Team wizard', () => {
     await expect(page.getByText('Agent 2')).toBeVisible()
   })
 
-  // TODO: remove .skip once TMPL-3 (wizard integration) is merged
-  test.skip('switching template updates the agents step', async ({ page }) => {
+  test('switching template updates the agents step', async ({ page }) => {
     await authenticate(page)
     await page.route('/api/templates', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([FULLSTACK_TEMPLATE, SOLO_TEMPLATE]),
+        body: JSON.stringify({ templates: [FULLSTACK_TEMPLATE, SOLO_TEMPLATE] }),
       })
     )
 
     await page.goto('/dashboard/teams/new')
     await page.waitForLoadState('networkidle')
 
-    // Select Full-stack first, then switch to Solo dev
+    // Select Full-stack first, then switch to Solo dev, then advance to step 1 (Team)
     await page.getByRole('button', { name: 'Full-stack team' }).click()
     await page.getByRole('button', { name: 'Solo dev' }).click()
+    await page.getByRole('button', { name: 'Next →' }).click()
 
-    // Navigate to agents step
+    // Navigate to agents step (step 2)
     await page.getByPlaceholder('e.g. alpha-squad').fill('switch-test')
     await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
-    await page.getByRole('button', { name: 'Next →' }).click()
     await page.getByRole('button', { name: 'Next →' }).click()
     await expect(page.getByRole('heading', { name: 'Add agents' })).toBeVisible()
 

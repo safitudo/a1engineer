@@ -17,7 +17,7 @@ const MODELS = [
   { id: 'haiku', label: 'haiku' },
 ]
 
-const STEPS = ['Template', 'Team', 'Runtime', 'Agents', 'API Key', 'Review']
+const STEPS = ['Template', 'Team', 'Agents', 'API Key', 'Review']
 
 // Sentinel for "no template / fully custom"
 const CUSTOM_TEMPLATE = {
@@ -25,7 +25,7 @@ const CUSTOM_TEMPLATE = {
   name: 'Custom',
   description: 'Start from scratch with a blank configuration.',
   runtime: 'claude-code',
-  agents: [{ role: 'dev', model: 'sonnet', prompt: '' }],
+  agents: [{ role: 'dev', model: 'sonnet', runtime: 'claude-code', prompt: '' }],
   tags: [],
 }
 
@@ -241,52 +241,10 @@ function Step1({ name, setName, repoUrl, setRepoUrl, error }) {
   )
 }
 
-// Step 2: Runtime selection
-function Step2({ runtime, setRuntime }) {
-  return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-xl font-semibold text-white mb-1">Choose a runtime</h2>
-        <p className="text-sm text-[#8b949e]">Select the AI runtime your agents will use.</p>
-      </div>
-      <div className="flex flex-col gap-3">
-        {RUNTIMES.map(({ id, label, available }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => available && setRuntime(id)}
-            className={`flex items-center justify-between px-4 py-3 rounded-lg border text-left transition-colors
-              ${!available ? 'opacity-40 cursor-not-allowed border-[#30363d]' : ''}
-              ${available && runtime === id ? 'border-[#3fb950] bg-[#3fb950]/5' : ''}
-              ${available && runtime !== id ? 'border-[#30363d] hover:border-[#8b949e]' : ''}`}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center
-                  ${runtime === id && available ? 'border-[#3fb950]' : 'border-[#8b949e]'}`}
-              >
-                {runtime === id && available && (
-                  <div className="w-2 h-2 rounded-full bg-[#3fb950]" />
-                )}
-              </div>
-              <span className="text-sm font-medium text-[#e6edf3]">{label}</span>
-            </div>
-            {!available && (
-              <span className="text-[10px] font-mono text-[#8b949e] border border-[#30363d] rounded px-2 py-0.5">
-                coming soon
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// Step 3: Add agents (free-text role with datalist, per-agent prompt)
+// Step 2: Add agents (free-text role with datalist, per-agent prompt)
 function Step3({ agents, setAgents, error }) {
   function addAgent() {
-    setAgents([...agents, { role: 'dev', model: 'sonnet', prompt: '' }])
+    setAgents([...agents, { role: 'dev', model: 'sonnet', runtime: 'claude-code', prompt: '' }])
   }
 
   function removeAgent(i) {
@@ -347,6 +305,13 @@ function Step3({ agents, setAgents, error }) {
                 options={MODELS.map((m) => ({ value: m.id, label: m.label }))}
               />
 
+              <Select
+                label="Runtime"
+                value={agent.runtime ?? 'claude-code'}
+                onChange={(v) => updateAgent(i, 'runtime', v)}
+                options={RUNTIMES.map((r) => ({ value: r.id, label: r.label, disabled: !r.available }))}
+              />
+
               <AgentPrompt
                 value={agent.prompt ?? ''}
                 onChange={(v) => updateAgent(i, 'prompt', v)}
@@ -369,9 +334,10 @@ function Step3({ agents, setAgents, error }) {
   )
 }
 
-// Step 4: API key
-function Step4({ runtime, apiKey, setApiKey, error }) {
+// Step 3: API key
+function Step4({ agents, apiKey, setApiKey, error }) {
   const [show, setShow] = useState(false)
+  const runtime = agents[0]?.runtime ?? 'claude-code'
   const runtimeLabel = RUNTIMES.find((r) => r.id === runtime)?.label ?? runtime
   const placeholder = runtime === 'claude-code' ? 'sk-ant-api03-...' : 'sk-...'
 
@@ -418,10 +384,8 @@ function Step4({ runtime, apiKey, setApiKey, error }) {
   )
 }
 
-// Step 5: Review + Launch
-function Step5({ name, repoUrl, runtime, agents, templateName, loading }) {
-  const runtimeLabel = RUNTIMES.find((r) => r.id === runtime)?.label ?? runtime
-
+// Step 4: Review + Launch
+function Step5({ name, repoUrl, agents, templateName, loading }) {
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -445,24 +409,23 @@ function Step5({ name, repoUrl, runtime, agents, templateName, loading }) {
           <span className="text-sm text-[#79c0ff] font-mono truncate max-w-[220px]">{repoUrl}</span>
         </div>
         <div className="flex justify-between px-4 py-3">
-          <span className="text-xs text-[#8b949e] font-mono">Runtime</span>
-          <span className="text-sm text-[#e6edf3]">{runtimeLabel}</span>
-        </div>
-        <div className="flex justify-between px-4 py-3">
           <span className="text-xs text-[#8b949e] font-mono">Agents</span>
           <span className="text-sm text-[#e6edf3]">{agents.length}</span>
         </div>
         <div className="px-4 py-3">
           <span className="text-xs text-[#8b949e] font-mono block mb-2">Agent roles</span>
           <div className="flex flex-wrap gap-2">
-            {agents.map((a, i) => (
-              <span
-                key={i}
-                className="text-xs font-mono bg-[#161b22] border border-[#30363d] rounded px-2 py-1 text-[#3fb950]"
-              >
-                {a.role}{a.model ? ` · ${a.model}` : ''}
-              </span>
-            ))}
+            {agents.map((a, i) => {
+              const runtimeLabel = RUNTIMES.find((r) => r.id === (a.runtime ?? 'claude-code'))?.label ?? a.runtime
+              return (
+                <span
+                  key={i}
+                  className="text-xs font-mono bg-[#161b22] border border-[#30363d] rounded px-2 py-1 text-[#3fb950]"
+                >
+                  {a.role}{a.model ? ` · ${a.model}` : ''}{runtimeLabel ? ` · ${runtimeLabel}` : ''}
+                </span>
+              )
+            })}
           </div>
         </div>
         {agents.some((a) => a.prompt) && (
@@ -510,8 +473,7 @@ export default function NewTeamPage() {
   // Form state
   const [name, setName] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
-  const [runtime, setRuntime] = useState('claude-code')
-  const [agents, setAgents] = useState([{ role: 'dev', model: 'sonnet', prompt: '' }])
+  const [agents, setAgents] = useState([{ role: 'dev', model: 'sonnet', runtime: 'claude-code', prompt: '' }])
   const [apiKey, setApiKey] = useState('')
 
   const [error, setError] = useState(null)
@@ -530,11 +492,11 @@ export default function NewTeamPage() {
     setSelectedTemplateId(t.id)
     setSelectedTemplateName(t.id === 'custom' ? null : t.name)
     if (t.id !== 'custom') {
-      setRuntime(t.runtime ?? 'claude-code')
       setAgents(
         (t.agents ?? []).map((a) => ({
           role: a.role ?? 'dev',
           model: a.model ?? 'sonnet',
+          runtime: a.runtime ?? t.runtime ?? 'claude-code',
           prompt: a.prompt ?? '',
         }))
       )
@@ -548,10 +510,10 @@ export default function NewTeamPage() {
       if (!repoUrl.trim()) return setError('Repository URL is required') || false
       try { new URL(repoUrl.trim()) } catch { return setError('Enter a valid URL') || false }
     }
-    if (step === 3) {
+    if (step === 2) {
       if (agents.length === 0) return setError('Add at least one agent') || false
     }
-    if (step === 4) {
+    if (step === 3) {
       if (!apiKey.trim()) return setError('API key is required') || false
     }
     return true
@@ -576,7 +538,7 @@ export default function NewTeamPage() {
       repo: { url: repoUrl.trim() },
       agents: agents.map((a) => ({
         role: a.role,
-        runtime,
+        runtime: a.runtime ?? 'claude-code',
         ...(a.model ? { model: a.model } : {}),
         ...(a.prompt ? { prompt: a.prompt } : {}),
       })),
@@ -635,24 +597,20 @@ export default function NewTeamPage() {
             />
           )}
           {step === 2 && (
-            <Step2 runtime={runtime} setRuntime={setRuntime} />
-          )}
-          {step === 3 && (
             <Step3 agents={agents} setAgents={setAgents} error={error} />
           )}
-          {step === 4 && (
+          {step === 3 && (
             <Step4
-              runtime={runtime}
+              agents={agents}
               apiKey={apiKey}
               setApiKey={setApiKey}
               error={error}
             />
           )}
-          {step === 5 && (
+          {step === 4 && (
             <Step5
               name={name}
               repoUrl={repoUrl}
-              runtime={runtime}
               agents={agents}
               templateName={selectedTemplateName}
               loading={loading}
@@ -698,7 +656,7 @@ export default function NewTeamPage() {
         </div>
 
         {/* Launch error (shown below nav) */}
-        {step === 5 && error && !loading && (
+        {step === 4 && error && !loading && (
           <p className="text-sm text-red-400 mt-4 text-center">{error}</p>
         )}
       </div>
