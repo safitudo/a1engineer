@@ -145,4 +145,23 @@ test.describe('Signup page', () => {
 
     await expect(page.getByRole('link', { name: 'Log in' })).toBeVisible()
   })
+
+  test('already-authenticated user is redirected to /dashboard', async ({ page }) => {
+    await page.context().addCookies([
+      {
+        name: 'a1_api_key',
+        value: 'sk-test-key',
+        domain: 'localhost',
+        path: '/',
+        httpOnly: true,
+      },
+    ])
+    await page.route('/api/teams', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) })
+    )
+
+    await page.goto('/signup')
+    await page.waitForURL('**/dashboard')
+    await expect(page).toHaveURL(/\/dashboard/)
+  })
 })

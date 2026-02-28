@@ -2,21 +2,24 @@ import { NextResponse } from 'next/server'
 
 export function middleware(request) {
   const { pathname } = request.nextUrl
+  const apiKey = request.cookies.get('a1_api_key')?.value
 
-  // Skip non-dashboard routes
-  if (!pathname.startsWith('/dashboard')) {
+  // Redirect authenticated users away from auth pages
+  if (pathname === '/login' || pathname === '/signup') {
+    if (apiKey) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
     return NextResponse.next()
   }
 
-  const apiKey = request.cookies.get('a1_api_key')?.value
+  // Protect dashboard routes
   if (!apiKey) {
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/dashboard/:path*', '/login', '/signup'],
 }
