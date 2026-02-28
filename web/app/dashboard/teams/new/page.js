@@ -277,7 +277,14 @@ function Step3({ agents, setAgents, error }) {
         {agents.map((agent, i) => (
           <div key={i} className="bg-[#0d1117] border border-[#30363d] rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-mono text-[#8b949e]">Agent {i + 1}</span>
+              <span className="text-xs font-mono text-[#8b949e]">
+                Agent {i + 1}
+                {agent.auth && (
+                  <span className="ml-2 text-xs font-mono text-[#79c0ff] bg-[#79c0ff]/10 border border-[#79c0ff]/20 rounded px-1.5 py-0.5">
+                    auth:{agent.auth}
+                  </span>
+                )}
+              </span>
               {agents.length > 1 && (
                 <button
                   type="button"
@@ -396,7 +403,7 @@ function Step4({ agents, apiKey, setApiKey, error }) {
 }
 
 // Step 4: Review + Launch
-function Step5({ name, repoUrl, agents, channels, templateName, loading }) {
+function Step5({ name, repoUrl, agents, channels, templateName, templateEnv, loading }) {
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -455,6 +462,18 @@ function Step5({ name, repoUrl, agents, channels, templateName, loading }) {
             </div>
           </div>
         )}
+        {templateEnv && Object.keys(templateEnv).length > 0 && (
+          <div className="px-4 py-3">
+            <span className="text-xs text-[#8b949e] font-mono block mb-2">Env vars</span>
+            <div className="flex flex-col gap-1">
+              {Object.entries(templateEnv).map(([k, v]) => (
+                <div key={k} className="text-xs font-mono text-[#8b949e] bg-[#161b22] border border-[#30363d] rounded px-2 py-1.5">
+                  <span className="text-[#79c0ff]">{k}</span>={v}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {channels && channels.trim() && (
           <div className="flex justify-between px-4 py-3">
             <span className="text-xs text-[#8b949e] font-mono">Channels</span>
@@ -486,6 +505,7 @@ export default function NewTeamPage() {
   const [templatesLoading, setTemplatesLoading] = useState(true)
   const [selectedTemplateId, setSelectedTemplateId] = useState('custom')
   const [selectedTemplateName, setSelectedTemplateName] = useState(null)
+  const [templateEnv, setTemplateEnv] = useState(null)
 
   // Form state
   const [name, setName] = useState('')
@@ -516,8 +536,12 @@ export default function NewTeamPage() {
           model: a.model ?? 'sonnet',
           runtime: a.runtime ?? t.runtime ?? 'claude-code',
           prompt: a.prompt ?? '',
+          ...(a.auth ? { auth: a.auth } : {}),
         }))
       )
+      setTemplateEnv(t.env ?? null)
+    } else {
+      setTemplateEnv(null)
     }
   }
 
@@ -639,6 +663,7 @@ export default function NewTeamPage() {
               agents={agents}
               channels={channels}
               templateName={selectedTemplateName}
+              templateEnv={templateEnv}
               loading={loading}
             />
           )}
