@@ -9,12 +9,21 @@ import { TEAMS_DIR } from '../constants.js'
 
 const router = Router()
 
-function checkTeamScope(req, res) {
+// Middleware: resolve team by :id, enforce scope + tenant isolation, auto-adopt
+function requireTeam(req, res, next) {
   if (req.teamScope && req.params.id !== req.teamScope) {
-    res.status(403).json({ error: 'forbidden', code: 'FORBIDDEN' })
-    return false
+    return res.status(403).json({ error: 'forbidden', code: 'FORBIDDEN' })
   }
-  return true
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
+    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
+  }
+  req.team = team
+  next()
 }
 
 // POST /api/teams — create team + spin up compose stack
@@ -64,32 +73,12 @@ router.get('/', (req, res) => {
 })
 
 // GET /api/teams/:id — team detail
-router.get('/:id', (req, res) => {
-  if (!checkTeamScope(req, res)) return
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
-    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  }
-  // Auto-adopt rehydrated teams (tenantId was cleared on restore)
-  if (req.tenantId && !team.tenantId) {
-    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
-  }
-  res.json(team)
+router.get('/:id', requireTeam, (req, res) => {
+  res.json(req.team)
 })
 
 // PATCH /api/teams/:id — update team config (name, apiKeys only — agents/repo require re-create)
-router.patch('/:id', (req, res) => {
-  if (!checkTeamScope(req, res)) return
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
-    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  }
-  if (req.tenantId && !team.tenantId) {
-    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
-  }
-
+router.patch('/:id', requireTeam, (req, res) => {
   const { name, auth, channels } = req.body ?? {}
   const updates = {}
   if (name !== undefined) {
@@ -125,17 +114,8 @@ router.patch('/:id', (req, res) => {
 })
 
 // GET /api/teams/:id/overview — high-level status of all agents (for Chuck orchestrator)
-router.get('/:id/overview', (req, res) => {
-  if (!checkTeamScope(req, res)) return
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
-    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  }
-  if (req.tenantId && !team.tenantId) {
-    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
-  }
-
+router.get('/:id/overview', requireTeam, (req, res) => {
+  const team = req.team
   const now = Date.now()
   const agents = (team.agents ?? []).map(a => {
     const lastHb = a.last_heartbeat ? new Date(a.last_heartbeat).getTime() : null
@@ -169,17 +149,7 @@ router.get('/:id/overview', (req, res) => {
 })
 
 // GET /api/teams/:id/logs — stream docker compose logs as SSE
-router.get('/:id/logs', (req, res) => {
-  if (!checkTeamScope(req, res)) return
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
-    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  }
-  if (req.tenantId && !team.tenantId) {
-    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
-  }
-
+router.get('/:id/logs', requireTeam, (req, res) => {
   const follow = req.query.follow === 'true'
   const tail = Math.max(1, parseInt(req.query.tail ?? '100', 10) || 100)
   const composePath = join(TEAMS_DIR, req.params.id, 'docker-compose.yml')
@@ -235,14 +205,7 @@ router.post('/rehydrate', async (req, res) => {
 })
 
 // DELETE /api/teams/:id — teardown compose stack + remove from store
-router.delete('/:id', async (req, res) => {
-  if (!checkTeamScope(req, res)) return
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
-    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  }
-
+router.delete('/:id', requireTeam, async (req, res) => {
   destroyGateway(req.params.id)
   try {
     await stopTeam(req.params.id)
