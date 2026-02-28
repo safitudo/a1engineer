@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import * as teamStore from '../store/teams.js'
 import { startTeam, stopTeam, rehydrateTeams } from '../orchestrator/compose.js'
-import { createGateway, destroyGateway } from '../irc/gateway.js'
+import { createGateway, destroyGateway, getGateway } from '../irc/gateway.js'
 import { routeMessage, clearTeamBuffers } from '../irc/router.js'
 
 const router = Router()
@@ -115,6 +115,9 @@ router.patch('/:id', (req, res) => {
   }
 
   const updated = teamStore.updateTeam(req.params.id, updates)
+  if (updates.channels) {
+    getGateway(req.params.id)?.updateChannels(updates.channels)
+  }
   res.json(updated)
 })
 
