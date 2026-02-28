@@ -9,6 +9,14 @@ import { initDb, closeDb } from '../store/db.js'
 vi.mock('../orchestrator/compose.js', () => ({
   startTeam: vi.fn().mockResolvedValue(undefined),
   stopTeam: vi.fn().mockResolvedValue(undefined),
+  rewriteCompose: vi.fn().mockResolvedValue(undefined),
+  startAgentService: vi.fn().mockResolvedValue(undefined),
+}))
+
+// Mock ws to avoid real WebSocket broadcasts
+vi.mock('./ws.js', () => ({
+  broadcastAgentStatus: vi.fn(),
+  broadcastHeartbeat: vi.fn(),
 }))
 
 // Mock IRC gateway to avoid real TCP connections
@@ -504,29 +512,49 @@ describe('POST /api/teams/:id/agents (spawn)', () => {
     expect(res.body.code).toBe('NOT_FOUND')
   })
 
-  it('returns 500 when startTeam fails', async () => {
+  it('returns 500 when rewriteCompose fails', async () => {
     const team = await createTeamWithAgent()
     // Set rejection AFTER creating the team, so fixture creation is not affected
-    const { startTeam } = await import('../orchestrator/compose.js')
-    vi.mocked(startTeam).mockRejectedValueOnce(new Error('docker daemon unavailable'))
+    const { rewriteCompose } = await import('../orchestrator/compose.js')
+    vi.mocked(rewriteCompose).mockRejectedValueOnce(new Error('docker daemon unavailable'))
 
     const res = await post(port, `/api/teams/${team.id}/agents`, { role: 'dev' })
     expect(res.status).toBe(500)
     expect(res.body.code).toBe('COMPOSE_ERROR')
   })
 
-  it('rolls back agent addition when startTeam fails', async () => {
+  it('rolls back agent addition when rewriteCompose fails', async () => {
     const team = await createTeamWithAgent()
     const originalAgentCount = team.agents.length
 
-    const { startTeam } = await import('../orchestrator/compose.js')
-    vi.mocked(startTeam).mockRejectedValueOnce(new Error('docker daemon unavailable'))
+    const { rewriteCompose } = await import('../orchestrator/compose.js')
+    vi.mocked(rewriteCompose).mockRejectedValueOnce(new Error('docker daemon unavailable'))
 
     await post(port, `/api/teams/${team.id}/agents`, { role: 'dev' })
 
     // Agent list should be restored to original length
     const agentsRes = await get(port, `/api/teams/${team.id}/agents`)
     expect(agentsRes.body.length).toBe(originalAgentCount)
+  })
+
+  it('calls startAgentService with correct teamId and agentId', async () => {
+    const team = await createTeamWithAgent()
+    const { startAgentService } = await import('../orchestrator/compose.js')
+    vi.mocked(startAgentService).mockClear()
+
+    const res = await post(port, `/api/teams/${team.id}/agents`, { role: 'qa' })
+    expect(res.status).toBe(201)
+    expect(vi.mocked(startAgentService)).toHaveBeenCalledWith(team.id, res.body.id)
+  })
+
+  it('broadcasts spawned status after successful spawn', async () => {
+    const team = await createTeamWithAgent()
+    const { broadcastAgentStatus } = await import('./ws.js')
+    vi.mocked(broadcastAgentStatus).mockClear()
+
+    const res = await post(port, `/api/teams/${team.id}/agents`, { role: 'qa' })
+    expect(res.status).toBe(201)
+    expect(vi.mocked(broadcastAgentStatus)).toHaveBeenCalledWith(team.id, res.body.id, 'spawned')
   })
 })
 
@@ -568,5 +596,30 @@ describe('DELETE /api/teams/:id/agents/:agentId', () => {
     const res = await del(port, `/api/teams/${team.id}/agents/no-such-agent`)
     expect(res.status).toBe(404)
     expect(res.body.code).toBe('AGENT_NOT_FOUND')
+  })
+
+  it('broadcasts killed status after removing agent', async () => {
+    const team = await createTeamWithAgent()
+    const agent = team.agents[0]
+    const { broadcastAgentStatus } = await import('./ws.js')
+    vi.mocked(broadcastAgentStatus).mockClear()
+
+    const res = await del(port, `/api/teams/${team.id}/agents/${agent.id}`)
+    expect(res.status).toBe(204)
+    expect(vi.mocked(broadcastAgentStatus)).toHaveBeenCalledWith(team.id, agent.id, 'killed')
+  })
+
+  it('rewrites compose after removing agent', async () => {
+    const team = await createTeamWithAgent()
+    const agent = team.agents[0]
+    const { rewriteCompose } = await import('../orchestrator/compose.js')
+    vi.mocked(rewriteCompose).mockClear()
+
+    const res = await del(port, `/api/teams/${team.id}/agents/${agent.id}`)
+    expect(res.status).toBe(204)
+    expect(vi.mocked(rewriteCompose)).toHaveBeenCalledOnce()
+    // Confirm compose was written without the deleted agent
+    const callArg = vi.mocked(rewriteCompose).mock.calls[0][0]
+    expect(callArg.agents.find((a) => a.id === agent.id)).toBeUndefined()
   })
 })

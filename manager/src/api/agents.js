@@ -3,7 +3,8 @@ import { execFile, spawn } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
 import * as teamStore from '../store/teams.js'
-import { startTeam } from '../orchestrator/compose.js'
+import { rewriteCompose, startAgentService } from '../orchestrator/compose.js'
+import { broadcastAgentStatus } from './ws.js'
 import { TEAMS_DIR } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
@@ -45,8 +46,10 @@ router.post('/', async (req, res) => {
   const updatedTeam = teamStore.updateTeam(team.id, { agents: updatedAgents })
 
   try {
-    // Re-render and apply compose — new service will be added, existing ones untouched
-    await startTeam(updatedTeam)
+    // Re-render compose file, then bring up only the new agent service
+    await rewriteCompose(updatedTeam)
+    await startAgentService(team.id, agentId)
+    broadcastAgentStatus(team.id, agentId, 'spawned')
     return res.status(201).json(newAgent)
   } catch (err) {
     // Roll back store addition
@@ -75,7 +78,13 @@ router.delete('/:agentId', async (req, res) => {
   }
 
   const updatedAgents = team.agents.filter((a) => a.id !== req.params.agentId)
-  teamStore.updateTeam(team.id, { agents: updatedAgents })
+  const updatedTeam = teamStore.updateTeam(team.id, { agents: updatedAgents })
+  broadcastAgentStatus(team.id, agent.id, 'killed')
+  try {
+    await rewriteCompose(updatedTeam)
+  } catch (err) {
+    console.error('[api/agents] rewriteCompose after delete failed:', err)
+  }
   res.status(204).end()
 })
 
