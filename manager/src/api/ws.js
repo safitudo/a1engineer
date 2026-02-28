@@ -249,17 +249,22 @@ export function attachWebSocketServer(server) {
           const existing = activeStreams.get(agentId)
           if (existing) clearInterval(existing.intervalId)
 
+          const entry = { teamId, intervalId: null, lastData: null }
+
           const intervalId = setInterval(async () => {
             if (ws.readyState !== WS_OPEN) return
             try {
               const data = await tmuxCapturePane(teamId, agentId)
+              if (data === entry.lastData) return
+              entry.lastData = data
               ws.send(JSON.stringify({ type: 'console.data', agentId, data }))
             } catch (err) {
               console.error(`[ws] console.data capture failed (${agentId}):`, err.message)
             }
           }, 500)
 
-          activeStreams.set(agentId, { teamId, intervalId })
+          entry.intervalId = intervalId
+          activeStreams.set(agentId, entry)
           ws.send(JSON.stringify({ type: 'console.attached', agentId }))
           break
         }
