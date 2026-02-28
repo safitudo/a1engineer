@@ -10,7 +10,6 @@ function rowToTenant(row) {
     id: row.id,
     name: row.name ?? undefined,
     email: row.email ?? undefined,
-    keyHash: row.key_hash,
     createdAt: row.created_at,
   }
 }
@@ -49,7 +48,7 @@ export function createTenant({ name, email }) {
   const now = new Date().toISOString()
   db.prepare('INSERT INTO tenants (id, key_hash, name, email, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(id, keyHash, name, email, now)
-  return { id, name, email, keyHash, createdAt: now, apiKey: plaintextKey }
+  return { id, name, email, createdAt: now, apiKey: plaintextKey }
 }
 
 export function listTenants() {
