@@ -104,7 +104,7 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 
 ---
 
-## Sprint Progress (2026-02-27)
+## Sprint Progress (2026-02-28)
 
 ### What's Been Built & Merged to Main
 
@@ -127,17 +127,19 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **Tenant Store** (`manager/src/store/tenants.js`) — In-memory Map, same pattern as teams.js
 - **Auth Endpoints** (`manager/src/api/auth.js`) — POST /api/auth/login validates Bearer token
 - **WebSocket Auth** — First-message auth protocol (opaque token or API key). validateWsToken for single-use tokens, findByApiKey fallback
-- **WS Opaque Token** (`manager/src/api/auth.js`) — POST /api/auth/ws-token generates single-use 60s TTL tokens (randomBytes(32)), prevents API key exposure to client JS
+- **WS Opaque Token** (`manager/src/api/auth.js`) — POST /api/auth/ws-token generates single-use 60s TTL tokens (randomBytes(32)), prevents API key exposure to client JS. Periodic sweep cleans expired unclaimed tokens
+- **WS Tenant Scoping** (`manager/src/api/ws.js`) — subscribe + console.attach reject null-tenantId teams and cross-tenant access. tenantId preserved through rehydration (sha256 is deterministic)
 - **IRC Channel Send** — POST /channels/:name/messages now works (was 501 stub), uses IrcGateway.say()
-- **Team Store Rehydration** — Writes team-meta.json on create, scans TEAMS_DIR on startup to rebuild store. POST /api/teams/rehydrate endpoint
+- **Team Store Rehydration** — Writes team-meta.json on create, scans TEAMS_DIR on startup to rebuild store. POST /api/teams/rehydrate endpoint. Preserves tenantId
 - **Signup Flow** — POST /api/auth/signup with randomUUID tenant + hashed key storage
 - **E2E Agent Harness** (`manager/src/e2e/agent-harness.test.js`) — node:test-based, 5 scenarios covering team lifecycle
 
 **Tests**
-- 142 unit/integration tests passing (9 test files)
+- 143 unit/integration tests passing (9 test files)
+- Playwright E2E: login, dashboard, wizard, team-detail (13 tests)
 - E2E agent harness (node:test, separate from vitest — excluded via vitest.config.js)
 - Test mocks for IRC gateway and router (prevent real TCP connections)
-- WS auth handshake + opaque token coverage
+- WS auth handshake + opaque token + tenant scoping coverage
 
 ### Architecture Decisions
 - **BYOK (Bring Your Own Key)** — Users provide their own API keys, no managed billing
@@ -154,19 +156,20 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 
 **P2 — DONE** ~~Phase 3 AgentConsole~~ — Backend (WS handlers), Frontend (xterm.js), TeamWSProvider (shared context), WS opaque token all merged.
 
-**P3 — In Progress**
-1. **#97 AgentConsole console.detached + error listeners** — Small follow-up from PR #96 review. Assigned to dev-3.
-2. **wsTokenStore cleanup sweep** — setInterval to delete expired tokens. Assigned to dev-4.
-3. **Playwright E2E tests for web UI** — Login, dashboard, wizard flows. Priority from Stanislav. Assigned to dev-5.
-4. **PR #50 PostgreSQL store** — Blocked: tests need async update. Parked.
+**P3 — DONE** ~~#97 AgentConsole listeners~~ — Merged PR #100. ~~#95 wsTokenStore sweep~~ — Merged PR #101. ~~#99 WS tenant scoping~~ — Merged PR #103. ~~#98 Team-detail E2E~~ — Merged PR #102.
+
+**P4 — Next**
+1. **More E2E test suites** — Priority from Stanislav. Expand coverage.
+2. **Configurable team roles + team templates** — Priority from Stanislav.
+3. **PR #50 PostgreSQL store** — Blocked: tests need async update. Parked.
 
 ### Current Assignments
 | Agent | Issue | Task | Status |
 |-------|-------|------|--------|
 | arch | — | Architecture, reviewing | Available |
-| dev-3 | #97 | AgentConsole console.detached + error listeners | Assigned |
-| dev-4 | — | wsTokenStore cleanup sweep | Assigned |
-| dev-5 | — | Playwright E2E tests (web UI) | ACK'd, in progress |
+| dev-3 | — | Available | — |
+| dev-4 | — | Available | — |
+| dev-5 | — | Available | — |
 | critic-7 | — | Reviewing PRs | Monitoring |
 | qa-6 | — | Testing, monitoring | Monitoring |
 
