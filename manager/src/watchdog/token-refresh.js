@@ -2,7 +2,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { join } from 'path'
 import * as teamStore from '../store/teams.js'
-import { resolveGitHubToken } from '../github/app.js'
+import { resolveGitHubToken, clearTokenCache } from '../github/app.js'
 import { TEAMS_DIR } from '../constants.js'
 
 const execFileAsync = promisify(execFile)
@@ -29,6 +29,11 @@ export function startTokenRefresh() {
 }
 
 async function refresh() {
+  // Clear cached tokens so we always generate a fresh one.
+  // Without this, the cache returns a token that may expire before the next
+  // 45-min refresh cycle (tokens live 1h, cache holds until 5min before expiry).
+  clearTokenCache()
+
   const teams = teamStore.listTeams()
 
   for (const team of teams) {
