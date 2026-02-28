@@ -6,7 +6,7 @@ import Link from 'next/link'
 import IrcFeed from '../../../../components/IrcFeed'
 import AgentConsole from '../../../../components/AgentConsole'
 import AgentActivity from '../../../../components/AgentActivity'
-import { TeamWSProvider } from '../../../../components/TeamWSProvider'
+import { TeamWSProvider, useTeamWS } from '../../../../components/TeamWSProvider'
 import AgentActions from '../../../../components/AgentActions'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
@@ -44,7 +44,17 @@ function heartbeatColor(lastHeartbeat) {
   return 'red'
 }
 
-function HeartbeatDot({ lastHeartbeat }) {
+function HeartbeatDot({ lastHeartbeat, wsStatus }) {
+  // wsStatus='stalled' overrides the computed colour immediately
+  if (wsStatus === 'stalled') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-[#8b949e]">
+        <span className="w-2 h-2 rounded-full shrink-0 bg-[#f85149]" />
+        stalled (nudged)
+      </span>
+    )
+  }
+
   const color = heartbeatColor(lastHeartbeat)
   const cls = {
     green:  'bg-[#3fb950] animate-pulse',
@@ -165,7 +175,7 @@ function AgentCard({ agent, isSelected, onToggle }) {
           <div className="text-sm font-semibold text-white font-mono">{agent.id}</div>
           <div className="text-xs text-[#8b949e] mt-0.5">{agent.role}</div>
         </div>
-        <HeartbeatDot lastHeartbeat={agent.last_heartbeat} key={now} />
+        <HeartbeatDot lastHeartbeat={agent.last_heartbeat} wsStatus={agent.wsStatus} key={now} />
       </div>
       <div className="text-xs text-[#8b949e] font-mono">
         last seen: {timeAgo(agent.last_heartbeat)}
@@ -211,6 +221,99 @@ function AgentCard({ agent, isSelected, onToggle }) {
   )
 }
 
+// ── Team Detail Body (inside TeamWSProvider — can call useTeamWS) ─────────────
+
+function TeamDetailBody({ team, teamId, stopping, onStop }) {
+  const [agents, setAgents] = useState(team.agents ?? [])
+  const [selectedAgent, setSelectedAgent] = useState(null)
+  const { addListener } = useTeamWS()
+
+  // ── WS listeners ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const unsubStatus = addListener('agent_status', (msg) => {
+      if (msg.teamId !== teamId) return
+      if (msg.status === 'spawned') {
+        // New agent arrived — refetch team to get full agent object
+        fetch(`/api/teams/${teamId}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (data) setAgents(data.agents ?? []) })
+          .catch(() => {})
+      } else if (msg.status === 'killed') {
+        setAgents(prev => prev.filter(a => a.id !== msg.agentId))
+        setSelectedAgent(prev => prev === msg.agentId ? null : prev)
+      } else if (msg.status === 'stalled' || msg.status === 'alive') {
+        setAgents(prev => prev.map(a =>
+          a.id === msg.agentId ? { ...a, wsStatus: msg.status } : a
+        ))
+      }
+    })
+
+    const unsubHeartbeat = addListener('heartbeat', (msg) => {
+      if (msg.teamId !== teamId) return
+      setAgents(prev => prev.map(a =>
+        a.id === msg.agentId ? { ...a, last_heartbeat: msg.timestamp, wsStatus: 'alive' } : a
+      ))
+    })
+
+    return () => {
+      unsubStatus()
+      unsubHeartbeat()
+    }
+  }, [addListener, teamId])
+
+  return (
+    <div className="flex-1 flex overflow-hidden max-w-7xl mx-auto w-full px-6 py-6 gap-6">
+
+      {/* Left: agent cards + IRC info */}
+      <aside className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-xs font-mono text-[#8b949e] uppercase tracking-wider">Agents</h2>
+          <span className="text-xs font-mono text-[#8b949e]">{agents.length}</span>
+        </div>
+        {agents.length === 0 ? (
+          <div className="text-xs text-[#8b949e] font-mono italic">No agents configured.</div>
+        ) : (
+          agents.map(agent => (
+            <div key={agent.id} className="flex flex-col gap-2">
+              <AgentCard
+                agent={agent}
+                isSelected={selectedAgent === agent.id}
+                onToggle={() => setSelectedAgent(prev => prev === agent.id ? null : agent.id)}
+              />
+              {selectedAgent === agent.id && (
+                <AgentActions teamId={teamId} agentId={agent.id} />
+              )}
+            </div>
+          ))
+        )}
+
+        {/* IRC connection details */}
+        <div className="mt-2 pt-3 border-t border-[#30363d]">
+          <h2 className="text-xs font-mono text-[#8b949e] uppercase tracking-wider mb-2">IRC Server</h2>
+          <IrcConnectionInfo team={team} />
+        </div>
+      </aside>
+
+      {/* Right: IRC feed + agent console + activity */}
+      <div className="flex-1 flex flex-col min-w-0 gap-4">
+        {selectedAgent && (
+          <>
+            <AgentConsole
+              teamId={teamId}
+              agentId={selectedAgent}
+              onClose={() => setSelectedAgent(null)}
+            />
+            <AgentActivity teamId={teamId} agentId={selectedAgent} />
+          </>
+        )}
+        <div className="flex-1 flex flex-col min-w-0">
+          <IrcFeed teamId={teamId} channels={team?.channels} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TeamDetailPage() {
@@ -218,11 +321,9 @@ export default function TeamDetailPage() {
   const router = useRouter()
 
   const [team, setTeam] = useState(null)
-  const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [stopping, setStopping] = useState(false)
-  const [selectedAgent, setSelectedAgent] = useState(null)
 
   // ── Fetch team ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -233,7 +334,6 @@ export default function TeamDetailPage() {
       })
       .then(data => {
         setTeam(data)
-        setAgents(data.agents ?? [])
         setLoading(false)
       })
       .catch(err => {
@@ -313,56 +413,8 @@ export default function TeamDetailPage() {
         </div>
       </div>
 
-      {/* Body: 2-panel layout */}
-      <div className="flex-1 flex overflow-hidden max-w-7xl mx-auto w-full px-6 py-6 gap-6">
-
-        {/* Left: agent cards + IRC info */}
-        <aside className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto">
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="text-xs font-mono text-[#8b949e] uppercase tracking-wider">Agents</h2>
-            <span className="text-xs font-mono text-[#8b949e]">{agents.length}</span>
-          </div>
-          {agents.length === 0 ? (
-            <div className="text-xs text-[#8b949e] font-mono italic">No agents configured.</div>
-          ) : (
-            agents.map(agent => (
-              <div key={agent.id} className="flex flex-col gap-2">
-                <AgentCard
-                  agent={agent}
-                  isSelected={selectedAgent === agent.id}
-                  onToggle={() => setSelectedAgent(prev => prev === agent.id ? null : agent.id)}
-                />
-                {selectedAgent === agent.id && (
-                  <AgentActions teamId={id} agentId={agent.id} />
-                )}
-              </div>
-            ))
-          )}
-
-          {/* IRC connection details */}
-          <div className="mt-2 pt-3 border-t border-[#30363d]">
-            <h2 className="text-xs font-mono text-[#8b949e] uppercase tracking-wider mb-2">IRC Server</h2>
-            <IrcConnectionInfo team={team} />
-          </div>
-        </aside>
-
-        {/* Right: IRC feed + agent console + activity */}
-        <div className="flex-1 flex flex-col min-w-0 gap-4">
-          {selectedAgent && (
-            <>
-              <AgentConsole
-                teamId={id}
-                agentId={selectedAgent}
-                onClose={() => setSelectedAgent(null)}
-              />
-              <AgentActivity teamId={id} agentId={selectedAgent} />
-            </>
-          )}
-          <div className="flex-1 flex flex-col min-w-0">
-            <IrcFeed teamId={id} channels={team?.channels} />
-          </div>
-        </div>
-      </div>
+      {/* Body: rendered inside provider so it can call useTeamWS() */}
+      <TeamDetailBody team={team} teamId={id} stopping={stopping} onStop={stopTeam} />
     </div>
     </TeamWSProvider>
   )
