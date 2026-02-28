@@ -1,10 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-
-// Manager WebSocket URL — Next.js rewrites don't proxy WS upgrades,
-// so connect directly to the manager. Override with NEXT_PUBLIC_WS_URL in production.
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8080'
+import { useTeamWS } from './TeamWSProvider'
 
 // Deterministic color per nick
 const NICK_COLORS = ['#3fb950', '#79c0ff', '#d2a8ff', '#ffa657', '#ff7b72', '#a5d6ff']
@@ -30,68 +27,24 @@ function formatTime(iso) {
 const MAX_MESSAGES = 500
 
 export default function IrcFeed({ teamId }) {
+  const { status, addListener } = useTeamWS()
   const [messages, setMessages] = useState([])
-  const [status, setStatus] = useState('connecting') // 'connecting' | 'connected' | 'disconnected'
   const bottomRef = useRef(null)
-  const wsRef = useRef(null)
 
+  // Register IRC message listener via the shared WS context
   useEffect(() => {
-    if (!teamId) return
+    if (!addListener) return
+    return addListener('message', (msg) => {
+      setMessages(prev => {
+        const next = [...prev, msg]
+        return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
+      })
+    })
+  }, [addListener])
 
-    setStatus('connecting')
+  // Clear message log when switching teams
+  useEffect(() => {
     setMessages([])
-
-    let cancelled = false
-
-    // Fetch WS auth token from server (bridges httpOnly cookie)
-    async function connect() {
-      let token = ''
-      try {
-        const res = await fetch('/api/auth/ws-token')
-        if (res.ok) {
-          const data = await res.json()
-          token = data.token ?? ''
-        }
-      } catch { /* proceed without token — server will reject if auth required */ }
-
-      if (cancelled) return
-
-      const ws = new WebSocket(`${WS_BASE}/ws`)
-      wsRef.current = ws
-
-      ws.onopen = () => {
-        // Send auth as first message — token never appears in the URL
-        ws.send(JSON.stringify({ type: 'auth', token }))
-      }
-
-      ws.onmessage = (event) => {
-        let msg
-        try { msg = JSON.parse(event.data) } catch { return }
-
-        if (msg.type === 'authenticated') {
-          // Auth accepted — now subscribe to the team's IRC feed
-          ws.send(JSON.stringify({ type: 'subscribe', teamId }))
-        } else if (msg.type === 'subscribed') {
-          setStatus('connected')
-        } else if (msg.type === 'message') {
-          setMessages(prev => {
-            const next = [...prev, msg]
-            return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
-          })
-        }
-        // heartbeat / agent_status not shown in this feed
-      }
-
-      ws.onerror = () => setStatus('disconnected')
-      ws.onclose = () => setStatus('disconnected')
-    }
-
-    connect()
-
-    return () => {
-      cancelled = true
-      wsRef.current?.close()
-    }
   }, [teamId])
 
   // Auto-scroll to newest message
@@ -100,12 +53,12 @@ export default function IrcFeed({ teamId }) {
   }, [messages])
 
   const statusColor =
-    status === 'connected' ? 'text-[#3fb950]' :
+    status === 'connected'  ? 'text-[#3fb950]' :
     status === 'connecting' ? 'text-[#79c0ff]' :
     'text-[#8b949e]'
 
   const statusDot =
-    status === 'connected' ? 'bg-[#3fb950] animate-pulse' :
+    status === 'connected'  ? 'bg-[#3fb950] animate-pulse' :
     status === 'connecting' ? 'bg-[#79c0ff] animate-pulse' :
     'bg-[#8b949e]'
 
@@ -125,7 +78,7 @@ export default function IrcFeed({ teamId }) {
         {messages.length === 0 ? (
           <p className="text-[#8b949e] text-center py-8">
             {status === 'connecting' ? 'Connecting…' :
-             status === 'connected' ? 'No messages yet' :
+             status === 'connected'  ? 'No messages yet' :
              'Disconnected'}
           </p>
         ) : (

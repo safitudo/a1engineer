@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import IrcFeed from '../../../../components/IrcFeed'
 import AgentConsole from '../../../../components/AgentConsole'
+import { TeamWSProvider } from '../../../../components/TeamWSProvider'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -248,6 +249,7 @@ export default function TeamDetailPage() {
   }
 
   return (
+    <TeamWSProvider teamId={id}>
     <div className="min-h-screen bg-[#0d1117] pt-14 flex flex-col">
       {/* Top bar */}
       <div className="border-b border-[#30363d] bg-[#0d1117] px-6 py-4">
@@ -316,5 +318,6 @@ export default function TeamDetailPage() {
         </div>
       </div>
     </div>
+    </TeamWSProvider>
   )
 }
