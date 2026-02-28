@@ -117,7 +117,7 @@ export default function AgentActivity({ teamId, agentId }) {
     return () => clearInterval(t)
   }, [fetchActivity])
 
-  const isEmpty = activity && !activity.branch && activity.recentCommits?.length === 0 && !activity.diffStat && !activity.status
+  const isEmpty = activity && !activity.branch && !activity.recentCommits?.length && !activity.diffStat && !activity.status
 
   return (
     <div className="bg-[#0d1117] border border-[#30363d] rounded-lg p-4 text-xs font-mono space-y-4">
