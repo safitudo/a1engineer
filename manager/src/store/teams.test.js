@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { createTeam, getTeam, listTeams, updateTeam, deleteTeam } from './teams.js'
+import { createTeam, getTeam, listTeams, updateTeam, deleteTeam, restoreTeam, DEFAULT_CHANNELS } from './teams.js'
 
 afterEach(() => {
   for (const team of listTeams()) deleteTeam(team.id)
@@ -149,5 +149,33 @@ describe('deleteTeam', () => {
 
   it('is a no-op for nonexistent id', () => {
     expect(() => deleteTeam('missing')).not.toThrow()
+  })
+})
+
+describe('createTeam channels', () => {
+  it('defaults to DEFAULT_CHANNELS when no channels provided', () => {
+    const team = createTeam({ name: 'test', agents: [] })
+    expect(team.channels).toEqual(DEFAULT_CHANNELS)
+  })
+
+  it('stores custom channels when provided', () => {
+    const custom = ['#dev', '#ops']
+    const team = createTeam({ name: 'test', agents: [], channels: custom })
+    expect(team.channels).toEqual(custom)
+  })
+})
+
+describe('restoreTeam channels', () => {
+  it('backfills DEFAULT_CHANNELS for teams missing channels field', () => {
+    const { channels: _ignored, ...partial } = createTeam({ name: 'old', agents: [] })
+    const restored = restoreTeam(partial)
+    expect(restored.channels).toEqual(DEFAULT_CHANNELS)
+  })
+
+  it('preserves existing channels when present', () => {
+    const custom = ['#custom']
+    const team = createTeam({ name: 'test', agents: [], channels: custom })
+    const restored = restoreTeam(team)
+    expect(restored.channels).toEqual(custom)
   })
 })

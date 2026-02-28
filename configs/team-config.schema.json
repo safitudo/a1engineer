@@ -148,6 +148,14 @@
         }
       }
     },
+    "channels": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^#[a-z][a-z0-9-]*$" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": ["#main", "#tasks", "#code", "#testing", "#merges"],
+      "description": "IRC channels for agents to join. Defaults to the 5 standard channels."
+    },
     "ergo": {
       "type": "object",
       "description": "Optional Ergo IRC server configuration. Defaults are sufficient for local dev.",

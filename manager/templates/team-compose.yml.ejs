@@ -80,6 +80,7 @@ services:
     environment:
       IRC_HOST: "ergo-<%- team.name %>"
       IRC_PORT: "<%- ergo.port || 6667 %>"
+      IRC_CHANNELS: "<%- (team.channels || ['#main','#tasks','#code','#testing','#merges']).join(',') %>"
       IRC_NICK: "<%- agent.id %>"
       IRC_ROLE: "<%- agent.role %>"
       CITY: "<%- team.name %>"
