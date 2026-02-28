@@ -1,6 +1,10 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { createHeartbeatServer } from './collector.js'
 import { createTeam, getTeam, listTeams, deleteTeam } from '../store/teams.js'
+import { initDb, closeDb } from '../store/db.js'
+
+beforeAll(() => initDb(':memory:'))
+afterAll(() => closeDb())
 
 let server
 

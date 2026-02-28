@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import http from 'http'
 import { createApp } from './index.js'
 import { loadTemplates } from './templates.js'
+import { initDb, closeDb } from '../store/db.js'
 
 // Mock compose + IRC so createApp() doesn't fail on import side-effects
 vi.mock('../orchestrator/compose.js', () => ({
@@ -79,6 +80,9 @@ const VALID_TEMPLATE = {
 
 let server
 let port
+
+beforeAll(() => initDb(':memory:'))
+afterAll(() => closeDb())
 
 beforeAll(async () => {
   await loadTemplates()

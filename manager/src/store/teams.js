@@ -1,6 +1,5 @@
 import { randomUUID, randomBytes } from 'crypto'
-
-// In-memory store — Phase 1 only. Graduated to SQLite/Postgres in Phase 2.
+import { getDb } from './db.js'
 
 export const DEFAULT_CHANNELS = ['#main', '#tasks', '#code', '#testing', '#merges']
 
@@ -16,10 +15,44 @@ function normalizeAuth(auth) {
   }
   return { mode }
 }
-const store = new Map()
+
+// Hydrate a DB row into a full team object.
+function rowToTeam(row) {
+  const blob = JSON.parse(row.data)
+  return {
+    ...blob,
+    id: row.id,
+    tenantId: row.tenant_id,
+    internalToken: row.internal_token,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+// Column-level fields stored outside the JSON blob.
+const COLUMN_FIELDS = new Set(['id', 'tenantId', 'internalToken', 'createdAt', 'updatedAt'])
+
+// Split a team object into { columns, blob } for DB writes.
+function splitTeam(team) {
+  const blob = {}
+  for (const [k, v] of Object.entries(team)) {
+    if (!COLUMN_FIELDS.has(k)) blob[k] = v
+  }
+  return {
+    columns: {
+      id: team.id,
+      tenant_id: team.tenantId ?? null,
+      internal_token: team.internalToken ?? null,
+      created_at: team.createdAt,
+      updated_at: team.updatedAt,
+    },
+    blob,
+  }
+}
 
 export function createTeam(config, { tenantId = null } = {}) {
   const id = randomUUID()
+  const now = new Date().toISOString()
   const team = {
     id,
     tenantId,
@@ -42,38 +75,55 @@ export function createTeam(config, { tenantId = null } = {}) {
     })),
     auth: normalizeAuth(config.auth),
     status: 'creating',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   }
-  store.set(id, team)
+
+  const { columns, blob } = splitTeam(team)
+  getDb().prepare(`
+    INSERT INTO teams (id, tenant_id, internal_token, data, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(columns.id, columns.tenant_id, columns.internal_token, JSON.stringify(blob), columns.created_at, columns.updated_at)
+
   return team
 }
 
 export function getTeam(id) {
-  return store.get(id) ?? null
+  const row = getDb().prepare('SELECT * FROM teams WHERE id = ?').get(id)
+  return row ? rowToTeam(row) : null
 }
 
 export function listTeams({ tenantId = null } = {}) {
-  const all = Array.from(store.values())
-  if (tenantId) return all.filter(t => t.tenantId === tenantId)
-  return all
+  let rows
+  if (tenantId) {
+    rows = getDb().prepare('SELECT * FROM teams WHERE tenant_id = ?').all(tenantId)
+  } else {
+    rows = getDb().prepare('SELECT * FROM teams').all()
+  }
+  return rows.map(rowToTeam)
 }
 
 export function updateTeam(id, updates) {
-  const team = store.get(id)
+  const team = getTeam(id)
   if (!team) throw new Error(`Team not found: ${id}`)
   const updated = { ...team, ...updates, updatedAt: new Date().toISOString() }
-  store.set(id, updated)
+  const { columns, blob } = splitTeam(updated)
+  getDb().prepare(`
+    UPDATE teams
+    SET tenant_id = ?, internal_token = ?, data = ?, updated_at = ?
+    WHERE id = ?
+  `).run(columns.tenant_id, columns.internal_token, JSON.stringify(blob), columns.updated_at, columns.id)
   return updated
 }
 
 export function deleteTeam(id) {
-  store.delete(id)
+  getDb().prepare('DELETE FROM teams WHERE id = ?').run(id)
 }
 
 // Re-insert a team object directly (used by rehydration on startup).
 // Skips createTeam logic — the team already has an id and normalized shape.
 export function restoreTeam(team) {
+  const now = new Date().toISOString()
   // Backfill internalToken for teams created before MANAGER_TOKEN feature
   if (!team.internalToken) {
     team = { ...team, internalToken: randomBytes(32).toString('hex') }
@@ -82,13 +132,22 @@ export function restoreTeam(team) {
   if (!team.channels) {
     team = { ...team, channels: DEFAULT_CHANNELS }
   }
-  store.set(team.id, team)
+  // Backfill timestamps for teams loaded from legacy formats without them
+  if (!team.createdAt) {
+    team = { ...team, createdAt: now }
+  }
+  if (!team.updatedAt) {
+    team = { ...team, updatedAt: now }
+  }
+  const { columns, blob } = splitTeam(team)
+  getDb().prepare(`
+    INSERT OR REPLACE INTO teams (id, tenant_id, internal_token, data, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(columns.id, columns.tenant_id, columns.internal_token, JSON.stringify(blob), columns.created_at, columns.updated_at)
   return team
 }
 
 export function findByInternalToken(token) {
-  for (const team of store.values()) {
-    if (team.internalToken === token) return team
-  }
-  return null
+  const row = getDb().prepare('SELECT * FROM teams WHERE internal_token = ?').get(token)
+  return row ? rowToTeam(row) : null
 }
