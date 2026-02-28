@@ -71,7 +71,7 @@ function request(method, path, { headers = {}, body } = {}) {
 // behaviour. Direct import is also fine but would share module state with the
 // HTTP-server instance — using the same in-process module is intentional.
 
-import { validateWsToken } from './auth.js'
+import { validateWsToken, signupAttempts } from './auth.js'
 
 describe('validateWsToken', () => {
   it('returns null for an unknown token', () => {
@@ -168,5 +168,120 @@ describe('wsTokenStore sweep', () => {
 
     // The sweep should have evicted the token — validateWsToken must return null
     expect(validateWsToken(token)).toBeNull()
+  })
+})
+
+// ── POST /api/auth/signup rate limiting ───────────────────────────────────────
+
+describe('POST /api/auth/signup rate limiting', () => {
+  // Each test uses a unique fake IP via X-Forwarded-For to avoid cross-test state
+  // (signupAttempts Map persists for the lifetime of the module instance)
+
+  it('allows up to 5 signups from the same IP', async () => {
+    const ip = '10.0.0.1'
+    signupAttempts.delete(ip)
+    for (let i = 0; i < 5; i++) {
+      const { status } = await request('POST', '/api/auth/signup', {
+        headers: { 'x-forwarded-for': ip },
+        body: { name: `org-rl-ok-${i}`, email: `rl-ok-${i}@example.com` },
+      })
+      expect(status).toBe(201)
+    }
+  })
+
+  it('returns 429 on the 6th signup from the same IP within the window', async () => {
+    const ip = '10.0.0.2'
+    signupAttempts.delete(ip)
+    for (let i = 0; i < 5; i++) {
+      await request('POST', '/api/auth/signup', {
+        headers: { 'x-forwarded-for': ip },
+        body: { name: `org-rl-limit-${i}`, email: `rl-limit-${i}@example.com` },
+      })
+    }
+    const { status, body } = await request('POST', '/api/auth/signup', {
+      headers: { 'x-forwarded-for': ip },
+      body: { name: 'blocked', email: 'blocked@example.com' },
+    })
+    expect(status).toBe(429)
+    expect(body.code).toBe('RATE_LIMITED')
+  })
+
+  it('resets the window after 1 hour and allows signups again', async () => {
+    const ip = '10.0.0.3'
+    signupAttempts.delete(ip)
+    const now = Date.now()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(now)
+
+    // Exhaust the limit
+    for (let i = 0; i < 5; i++) {
+      await request('POST', '/api/auth/signup', {
+        headers: { 'x-forwarded-for': ip },
+        body: { name: `org-rl-reset-${i}`, email: `rl-reset-${i}@example.com` },
+      })
+    }
+    const { status: blockedStatus } = await request('POST', '/api/auth/signup', {
+      headers: { 'x-forwarded-for': ip },
+      body: { name: 'blocked', email: 'blocked@example.com' },
+    })
+    expect(blockedStatus).toBe(429)
+
+    // Advance past the 1-hour window
+    vi.setSystemTime(now + 60 * 60 * 1000 + 1)
+
+    const { status: allowedStatus } = await request('POST', '/api/auth/signup', {
+      headers: { 'x-forwarded-for': ip },
+      body: { name: 'after-reset', email: 'after-reset@example.com' },
+    })
+    expect(allowedStatus).toBe(201)
+  })
+
+  it('counts IPs independently — different IPs are not affected by each other', async () => {
+    const ipA = '10.0.0.4'
+    const ipB = '10.0.0.5'
+    signupAttempts.delete(ipA)
+    signupAttempts.delete(ipB)
+
+    // Exhaust IP A
+    for (let i = 0; i < 5; i++) {
+      await request('POST', '/api/auth/signup', {
+        headers: { 'x-forwarded-for': ipA },
+        body: { name: `org-a-${i}`, email: `a-${i}@example.com` },
+      })
+    }
+
+    // IP A is now blocked
+    const { status: blockedA } = await request('POST', '/api/auth/signup', {
+      headers: { 'x-forwarded-for': ipA },
+      body: { name: 'org-a-6', email: 'a-6@example.com' },
+    })
+    expect(blockedA).toBe(429)
+
+    // IP B is unaffected
+    const { status: okB } = await request('POST', '/api/auth/signup', {
+      headers: { 'x-forwarded-for': ipB },
+      body: { name: 'org-b', email: 'b@example.com' },
+    })
+    expect(okB).toBe(201)
+  })
+
+  it('stale window entry is replaced on first request after expiry', async () => {
+    const ip = '10.0.0.6'
+    const now = Date.now()
+    vi.useFakeTimers({ toFake: ['Date'] })
+
+    // Seed a stale entry that is 2 hours old and nearly exhausted
+    signupAttempts.set(ip, { count: 4, windowStart: now - 2 * 60 * 60 * 1000 })
+    vi.setSystemTime(now)
+
+    // Request should succeed and reset the window (not be blocked by stale count)
+    const { status } = await request('POST', '/api/auth/signup', {
+      headers: { 'x-forwarded-for': ip },
+      body: { name: 'stale-org', email: 'stale@example.com' },
+    })
+    expect(status).toBe(201)
+
+    // Window was reset — count is now 1 (fresh window)
+    expect(signupAttempts.get(ip).count).toBe(1)
   })
 })

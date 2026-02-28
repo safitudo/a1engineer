@@ -4,6 +4,39 @@ import { upsertTenant, createTenant } from '../store/tenants.js'
 
 const router = Router()
 
+// ── Signup rate limiter ───────────────────────────────────────────────────────
+/** @type {Map<string, { count: number, windowStart: number }>} */
+export const signupAttempts = new Map()
+const SIGNUP_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+const SIGNUP_MAX = 5
+
+function getClientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim()
+    ?? req.socket?.remoteAddress
+    ?? 'unknown'
+}
+
+function checkSignupRateLimit(ip) {
+  const now = Date.now()
+  const entry = signupAttempts.get(ip)
+  if (!entry || now - entry.windowStart >= SIGNUP_WINDOW_MS) {
+    signupAttempts.set(ip, { count: 1, windowStart: now })
+    return false // not limited
+  }
+  if (entry.count >= SIGNUP_MAX) return true // limited
+  entry.count++
+  return false
+}
+
+// Sweep stale entries every hour to prevent unbounded memory growth
+const _signupSweep = setInterval(() => {
+  const now = Date.now()
+  for (const [ip, entry] of signupAttempts) {
+    if (now - entry.windowStart >= SIGNUP_WINDOW_MS) signupAttempts.delete(ip)
+  }
+}, SIGNUP_WINDOW_MS)
+_signupSweep.unref()
+
 // ── Single-use WS token store ─────────────────────────────────────────────────
 /** @type {Map<string, { tenantId: string, expiresAt: number }>} */
 const wsTokenStore = new Map()
@@ -49,6 +82,10 @@ router.post('/login', (req, res) => {
 
 // POST /api/auth/signup — register new tenant, return API key once
 router.post('/signup', (req, res) => {
+  const ip = getClientIp(req)
+  if (checkSignupRateLimit(ip)) {
+    return res.status(429).json({ error: 'too many signup attempts, try again later', code: 'RATE_LIMITED' })
+  }
   const { name, email } = req.body ?? {}
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'name is required', code: 'MISSING_NAME' })
