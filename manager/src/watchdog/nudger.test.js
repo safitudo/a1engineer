@@ -10,8 +10,13 @@ vi.mock('../store/teams.js', () => ({
   listTeams: vi.fn(),
 }))
 
+vi.mock('../api/ws.js', () => ({
+  broadcastAgentStatus: vi.fn(),
+}))
+
 import { writeFifo } from '../orchestrator/fifo.js'
 import { listTeams } from '../store/teams.js'
+import { broadcastAgentStatus } from '../api/ws.js'
 
 const NOW = new Date('2024-01-01T12:00:00.000Z').getTime()
 
@@ -203,5 +208,85 @@ describe('startNudger', () => {
 
     await tick()
     expect(writeFifo).not.toHaveBeenCalled()
+  })
+})
+
+describe('startNudger — stalled/alive status broadcasts', () => {
+  it('broadcasts stalled on first nudge', async () => {
+    listTeams.mockReturnValue([makeTeam()])
+
+    const { stop } = startNudger()
+    await tick()
+    stop()
+
+    expect(broadcastAgentStatus).toHaveBeenCalledOnce()
+    expect(broadcastAgentStatus).toHaveBeenCalledWith('team-1', 'agent-dev', 'stalled')
+  })
+
+  it('does not re-broadcast stalled on subsequent ticks', async () => {
+    listTeams.mockReturnValue([makeTeam()])
+
+    const { stop } = startNudger()
+    await tick()
+    await tick()
+    stop()
+
+    // Only one stalled broadcast across two ticks
+    const stalledCalls = broadcastAgentStatus.mock.calls.filter(([, , s]) => s === 'stalled')
+    expect(stalledCalls).toHaveLength(1)
+  })
+
+  it('broadcasts alive when stalled agent heartbeat refreshes below threshold', async () => {
+    // First tick: agent is stalled (STALE_HB)
+    listTeams.mockReturnValueOnce([makeTeam()])
+    // Second tick: agent heartbeat refreshed (FRESH_HB)
+    listTeams.mockReturnValue([
+      makeTeam({
+        agents: [{ id: 'agent-dev', role: 'dev', last_heartbeat: FRESH_HB }],
+      }),
+    ])
+
+    const { stop } = startNudger()
+    await tick() // stalled broadcast
+    await tick() // alive broadcast
+    stop()
+
+    expect(broadcastAgentStatus).toHaveBeenCalledWith('team-1', 'agent-dev', 'stalled')
+    expect(broadcastAgentStatus).toHaveBeenCalledWith('team-1', 'agent-dev', 'alive')
+  })
+
+  it('does not broadcast alive if agent was never stalled', async () => {
+    // Agent always has fresh heartbeat — never crosses threshold
+    listTeams.mockReturnValue([
+      makeTeam({
+        agents: [{ id: 'agent-dev', role: 'dev', last_heartbeat: FRESH_HB }],
+      }),
+    ])
+
+    const { stop } = startNudger()
+    await tick()
+    await tick()
+    stop()
+
+    expect(broadcastAgentStatus).not.toHaveBeenCalled()
+  })
+
+  it('does not re-broadcast alive on repeated fresh ticks after recovery', async () => {
+    listTeams
+      .mockReturnValueOnce([makeTeam()]) // stalled tick
+      .mockReturnValue([
+        makeTeam({
+          agents: [{ id: 'agent-dev', role: 'dev', last_heartbeat: FRESH_HB }],
+        }),
+      ]) // subsequent fresh ticks
+
+    const { stop } = startNudger()
+    await tick() // stalled
+    await tick() // alive
+    await tick() // no-op
+    stop()
+
+    const aliveCalls = broadcastAgentStatus.mock.calls.filter(([, , s]) => s === 'alive')
+    expect(aliveCalls).toHaveLength(1)
   })
 })
