@@ -115,7 +115,7 @@ export async function renderCompose(teamConfig, secretsDir = null, apiKey = null
     ergoMerged.configPath = resolve(ergoMerged.configPath)
   }
   return ejs.render(template, {
-    team: { id: teamConfig.id, name: teamConfig.name, internalToken: teamConfig.internalToken },
+    team: { id: teamConfig.id, name: teamConfig.name, internalToken: teamConfig.internalToken, channels: teamConfig.channels },
     ergo: ergoMerged,
     repo: { ...teamConfig.repo, githubToken: githubToken || teamConfig.repo?.githubToken },
     agents,
@@ -163,6 +163,7 @@ export async function startTeam(teamConfig, opts = {}) {
       runtime: a.runtime ?? 'claude-code', effort: a.effort ?? 'high',
       prompt: a.prompt ?? '', auth: a.auth ?? null, env: a.env ?? {},
     })),
+    channels: teamConfig.channels ?? null,
     auth: teamConfig.auth ?? null,
     status: 'running',
     createdAt: teamConfig.createdAt ?? new Date().toISOString(),
