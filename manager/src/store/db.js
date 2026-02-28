@@ -31,6 +31,21 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    name: '003_create_templates',
+    sql: `
+      CREATE TABLE IF NOT EXISTS templates (
+        id          TEXT PRIMARY KEY,
+        tenant_id   TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        agents      TEXT NOT NULL,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_templates_tenant_id ON templates(tenant_id);
+    `,
+  },
 ]
 
 function runMigrations(db) {
