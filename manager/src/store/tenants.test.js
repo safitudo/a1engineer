@@ -14,7 +14,7 @@ describe('upsertTenant', () => {
     const t1 = upsertTenant('deterministic-test-key')
     const t2 = upsertTenant('deterministic-test-key')
     expect(t1.id).toBe(t2.id)
-    expect(t1.apiKey).toBe('deterministic-test-key')
+    expect(t1).not.toHaveProperty('apiKey')
   })
 
   it('different keys produce different ids', () => {
@@ -34,7 +34,7 @@ describe('findByApiKey', () => {
     upsertTenant('find-test-key')
     const found = findByApiKey('find-test-key')
     expect(found).not.toBeNull()
-    expect(found.apiKey).toBe('find-test-key')
+    expect(found).not.toHaveProperty('apiKey')
   })
 
   it('returns null for unknown key', () => {
