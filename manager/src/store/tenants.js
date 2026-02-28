@@ -16,7 +16,7 @@ export function findByApiKey(apiKey) {
 export function upsertTenant(apiKey) {
   if (tenants.has(apiKey)) return tenants.get(apiKey)
   const tenant = {
-    id: randomUUID(),
+    id: createHash('sha256').update(apiKey).digest('hex').slice(0, 16),
     apiKey,
     createdAt: new Date().toISOString(),
   }
