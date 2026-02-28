@@ -122,6 +122,10 @@ function IrcConnectionInfo({ team }) {
           </div>
         </>
       )}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[#8b949e]">TLS</span>
+        <span className="text-[#8b949e] text-[10px]">none (plain IRC)</span>
+      </div>
       <div>
         <div className="text-[#8b949e] mb-1.5">channels</div>
         <div className="flex flex-wrap gap-1">
