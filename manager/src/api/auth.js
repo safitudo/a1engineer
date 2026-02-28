@@ -4,6 +4,11 @@ import { upsertTenant, createTenant } from '../store/tenants.js'
 
 const router = Router()
 
+// ── Login/signup rate limiter ─────────────────────────────────────────────────
+/** @type {Map<string, { count: number, windowStart: number }>} */
+export const loginAttempts = new Map()
+const RATE_LIMIT = { maxAttempts: 10, windowMs: 60_000 } // 10 req / 60s
+
 // ── Signup rate limiter ───────────────────────────────────────────────────────
 /** @type {Map<string, { count: number, windowStart: number }>} */
 export const signupAttempts = new Map()
@@ -15,6 +20,27 @@ function getClientIp(req) {
     ?? req.socket?.remoteAddress
     ?? 'unknown'
 }
+
+function checkLoginRate(ip) {
+  const now = Date.now()
+  const entry = loginAttempts.get(ip)
+  if (!entry || now - entry.windowStart >= RATE_LIMIT.windowMs) {
+    loginAttempts.set(ip, { count: 1, windowStart: now })
+    return false // not limited
+  }
+  if (entry.count >= RATE_LIMIT.maxAttempts) return true // limited
+  entry.count++
+  return false
+}
+
+// Sweep stale login entries every 60s to prevent unbounded memory growth
+const _loginSweep = setInterval(() => {
+  const now = Date.now()
+  for (const [ip, entry] of loginAttempts) {
+    if (now - entry.windowStart >= RATE_LIMIT.windowMs) loginAttempts.delete(ip)
+  }
+}, RATE_LIMIT.windowMs)
+_loginSweep.unref()
 
 function checkSignupRateLimit(ip) {
   const now = Date.now()
@@ -67,6 +93,10 @@ export function validateWsToken(token) {
 
 // POST /api/auth/login — validate API key, return tenant info
 router.post('/login', (req, res) => {
+  const ip = getClientIp(req)
+  if (checkLoginRate(ip)) {
+    return res.status(429).json({ error: 'too many requests', code: 'RATE_LIMITED' })
+  }
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'missing or invalid Authorization header', code: 'UNAUTHORIZED' })
@@ -83,6 +113,9 @@ router.post('/login', (req, res) => {
 // POST /api/auth/signup — register new tenant, return API key once
 router.post('/signup', (req, res) => {
   const ip = getClientIp(req)
+  if (checkLoginRate(ip)) {
+    return res.status(429).json({ error: 'too many requests', code: 'RATE_LIMITED' })
+  }
   if (checkSignupRateLimit(ip)) {
     return res.status(429).json({ error: 'too many signup attempts, try again later', code: 'RATE_LIMITED' })
   }
