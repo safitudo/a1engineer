@@ -83,6 +83,17 @@ export default function DashboardLayout({ children }) {
             All Teams
           </Link>
           <Link
+            href="/dashboard/templates"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+              pathname?.startsWith('/dashboard/templates')
+                ? 'bg-[#21262d] text-white'
+                : 'text-[#8b949e] hover:text-white hover:bg-[#21262d]'
+            }`}
+          >
+            <span className="font-mono text-[#3fb950] text-xs shrink-0">⊞</span>
+            Templates
+          </Link>
+          <Link
             href="/dashboard/settings"
             className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
               pathname?.startsWith('/dashboard/settings')
