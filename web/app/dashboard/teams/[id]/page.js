@@ -7,6 +7,7 @@ import IrcFeed from '../../../../components/IrcFeed'
 import AgentConsole from '../../../../components/AgentConsole'
 import AgentActivity from '../../../../components/AgentActivity'
 import { TeamWSProvider } from '../../../../components/TeamWSProvider'
+import AgentActions from '../../../../components/AgentActions'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -325,12 +326,16 @@ export default function TeamDetailPage() {
             <div className="text-xs text-[#8b949e] font-mono italic">No agents configured.</div>
           ) : (
             agents.map(agent => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                isSelected={selectedAgent === agent.id}
-                onToggle={() => setSelectedAgent(prev => prev === agent.id ? null : agent.id)}
-              />
+              <div key={agent.id} className="flex flex-col gap-2">
+                <AgentCard
+                  agent={agent}
+                  isSelected={selectedAgent === agent.id}
+                  onToggle={() => setSelectedAgent(prev => prev === agent.id ? null : agent.id)}
+                />
+                {selectedAgent === agent.id && (
+                  <AgentActions teamId={id} agentId={agent.id} />
+                )}
+              </div>
             ))
           )}
 
