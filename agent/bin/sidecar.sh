@@ -41,7 +41,7 @@ wait_for_tmux() {
 heartbeat_loop() {
   while true; do
     if [ -n "${HEARTBEAT_URL:-}" ]; then
-      curl -sf -X POST "$HEARTBEAT_URL" -o /dev/null 2>/dev/null || true
+      curl -sf -X POST "$HEARTBEAT_URL" -H "Authorization: Bearer ${MANAGER_TOKEN:-}" -o /dev/null 2>/dev/null || true
     fi
     sleep "$HEARTBEAT_INTERVAL"
   done
