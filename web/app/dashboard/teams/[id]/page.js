@@ -8,6 +8,7 @@ import AgentConsole from '../../../../components/AgentConsole'
 import AgentActivity from '../../../../components/AgentActivity'
 import { TeamWSProvider, useTeamWS } from '../../../../components/TeamWSProvider'
 import AgentActions from '../../../../components/AgentActions'
+import IrcConnectionInfo from '../../../../components/IrcConnectionInfo'
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -80,78 +81,6 @@ function timeAgo(ts) {
   if (secs < 60) return `${secs}s ago`
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
   return `${Math.floor(secs / 3600)}h ago`
-}
-
-// ── IRC connection info ────────────────────────────────────────────────────────
-
-function IrcConnectionInfo({ team }) {
-  const [copied, setCopied] = useState(null)
-  const ergo = team.ergo ?? {}
-  const hostPort = ergo.hostPort ?? null
-  const internalPort = ergo.port ?? 6667
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
-
-  function copy(text, key) {
-    navigator.clipboard?.writeText(text).then(() => {
-      setCopied(key)
-      setTimeout(() => setCopied(null), 1500)
-    })
-  }
-
-  return (
-    <div className="text-xs font-mono space-y-2">
-      {hostPort ? (
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[#8b949e]">host</span>
-            <span className="text-[#e6edf3]">{host}</span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[#8b949e]">port</span>
-            <span className="text-[#e6edf3]">{hostPort}</span>
-          </div>
-          <button
-            onClick={() => copy(`${host}:${hostPort}`, 'addr')}
-            className="w-full text-left px-2 py-1 rounded bg-[#161b22] border border-[#30363d] hover:border-[#3fb950]/40 text-[#8b949e] hover:text-[#3fb950] transition-colors"
-          >
-            {copied === 'addr' ? '✓ copied' : `copy ${host}:${hostPort}`}
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[#8b949e]">host</span>
-            <span className="text-[#e6edf3]">{`ergo-${team.name}`}</span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[#8b949e]">port</span>
-            <span className="text-[#e6edf3]">{internalPort}</span>
-          </div>
-          <div className="text-[#8b949e] text-[10px] leading-relaxed">
-            internal only — set <span className="text-[#e6edf3]">ergo.hostPort</span> to expose
-          </div>
-        </>
-      )}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[#8b949e]">TLS</span>
-        <span className="text-[#8b949e] text-[10px]">none (plain IRC)</span>
-      </div>
-      <div>
-        <div className="text-[#8b949e] mb-1.5">channels</div>
-        <div className="flex flex-wrap gap-1">
-          {(team.channels ?? ['#main', '#tasks', '#code', '#testing', '#merges']).map(ch => (
-            <button
-              key={ch}
-              onClick={() => copy(ch, ch)}
-              className="px-1.5 py-0.5 rounded bg-[#161b22] border border-[#30363d] text-[#79c0ff] hover:border-[#79c0ff]/40 hover:bg-[#79c0ff]/5 transition-colors"
-            >
-              {copied === ch ? '✓' : ch}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ── Agent card ────────────────────────────────────────────────────────────────
