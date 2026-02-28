@@ -13,37 +13,57 @@ async function authenticate(page) {
   ])
 }
 
-// Helper: complete wizard steps 1–4 and land on review step
-async function fillWizard(page) {
+/**
+ * Complete all wizard steps and land on the Review & launch step.
+ *
+ * Actual step flow:
+ *   Step 0 — Start from a template  (fetches /api/templates)
+ *   Step 1 — Name your team         (name + repo + channels)
+ *   Step 2 — Add agents
+ *   Step 3 — Your API key
+ *   Step 4 — Review & launch
+ */
+async function fillWizard(page, { teamName = 'lifecycle-test' } = {}) {
   await authenticate(page)
+
+  // Mock templates API so step 0 renders without real network
+  await page.route('/api/templates', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ templates: [] }),
+    })
+  )
+
   await page.goto('/dashboard/teams/new')
   await page.waitForLoadState('networkidle')
-  await expect(page.getByRole('heading', { name: 'Name your team' })).toBeVisible()
+
+  // Step 0: template picker — advance
+  await expect(page.getByRole('heading', { name: 'Start from a template' })).toBeVisible()
+  await page.getByRole('button', { name: 'Next →' }).click()
 
   // Step 1: name + repo
-  await page.getByPlaceholder('e.g. alpha-squad').fill('lifecycle-test')
+  await expect(page.getByRole('heading', { name: 'Name your team' })).toBeVisible()
+  await page.getByPlaceholder('e.g. alpha-squad').fill(teamName)
   await page.getByPlaceholder('https://github.com/org/repo').fill('https://github.com/org/repo')
   await page.getByRole('button', { name: 'Next →' }).click()
 
-  // Step 2: runtime
-  await expect(page.getByRole('heading', { name: 'Choose a runtime' })).toBeVisible()
-  await page.getByRole('button', { name: 'Next →' }).click()
-
-  // Step 3: agents
+  // Step 2: agents — advance without changes
   await expect(page.getByRole('heading', { name: 'Add agents' })).toBeVisible()
   await page.getByRole('button', { name: 'Next →' }).click()
 
-  // Step 4: API key
+  // Step 3: API key
   await expect(page.getByRole('heading', { name: 'Your API key' })).toBeVisible()
   const apiKeyInput = page.getByPlaceholder('sk-ant-api03-...')
   await apiKeyInput.scrollIntoViewIfNeeded()
   await apiKeyInput.fill('sk-ant-api03-testkey')
   await page.getByRole('button', { name: 'Next →' }).click()
 
+  // Step 4: review
   await expect(page.getByRole('heading', { name: 'Review & launch' })).toBeVisible()
 }
 
-test.describe('Team lifecycle', () => {
+test.describe.serial('Team lifecycle', () => {
   test('create team via wizard and verify team card on dashboard', async ({ page }) => {
     const createdTeam = {
       id: 'lifecycle-team-1',
@@ -73,7 +93,7 @@ test.describe('Team lifecycle', () => {
 
     await fillWizard(page)
 
-    await page.getByRole('button', { name: 'Launch team' }).click()
+    await page.getByRole('button', { name: /Launch/i }).click()
 
     // Redirects to dashboard after successful launch
     await page.waitForURL('**/dashboard')
@@ -235,5 +255,71 @@ test.describe('Team lifecycle', () => {
     // Should stay on the team detail page
     await expect(page).toHaveURL(/\/teams\/cancel-stop-team/)
     await expect(page.getByRole('heading', { name: 'cancel-test' })).toBeVisible()
+  })
+
+  test('delete team from settings redirects to /dashboard', async ({ page }) => {
+    const team = {
+      id: 'delete-team-1',
+      name: 'delete-test',
+      status: 'stopped',
+      channels: ['#main'],
+      agents: [],
+      repo: { url: 'https://github.com/org/repo', branch: 'main' },
+      ergo: { port: 6667 },
+    }
+
+    await authenticate(page)
+    await page.route('/api/teams/delete-team-1', async route => {
+      if (route.request().method() === 'DELETE') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true }),
+        })
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(team),
+        })
+      }
+    })
+
+    await page.goto('/dashboard/teams/delete-team-1/settings')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+
+    page.on('dialog', dialog => dialog.accept())
+    await page.getByRole('button', { name: 'Stop Team' }).click()
+
+    await page.waitForURL('**/dashboard')
+    await expect(page).toHaveURL(/\/dashboard$/)
+  })
+
+  test('wizard shows error when team creation fails with 500', async ({ page }) => {
+    await page.route('/api/teams', async route => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Internal server error' }),
+        })
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([]),
+        })
+      }
+    })
+
+    await fillWizard(page)
+
+    await page.getByRole('button', { name: /Launch/i }).click()
+
+    // Should stay on the wizard and show an error
+    await expect(page.getByText(/error|failed/i)).toBeVisible()
+    await expect(page).not.toHaveURL(/\/dashboard$/)
   })
 })
