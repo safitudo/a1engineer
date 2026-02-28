@@ -175,6 +175,35 @@ function AgentCard({ agent, isSelected, onToggle }) {
           model: {agent.model}
         </div>
       )}
+      {agent.runtime && (
+        <div className="mt-1 text-xs text-[#8b949e] font-mono truncate">
+          runtime: <span className="text-[#79c0ff]">{agent.runtime}</span>
+        </div>
+      )}
+      {agent.effort && (
+        <div className="mt-1 text-xs text-[#8b949e] font-mono">
+          effort: <span className="text-[#d29922]">{agent.effort}</span>
+        </div>
+      )}
+      {agent.auth && (
+        <div className="mt-1 text-xs text-[#8b949e] font-mono truncate">
+          auth: <span className="text-[#e6edf3]">
+            {typeof agent.auth === 'object' ? (agent.auth.mode ?? JSON.stringify(agent.auth)) : String(agent.auth)}
+          </span>
+        </div>
+      )}
+      {agent.env && Object.keys(agent.env).length > 0 && (
+        <div className="mt-1.5">
+          <div className="text-[10px] text-[#8b949e] font-mono mb-1">env</div>
+          <div className="flex flex-wrap gap-1">
+            {Object.keys(agent.env).map(k => (
+              <span key={k} className="text-[9px] font-mono px-1.5 py-0.5 bg-[#161b22] border border-[#30363d] rounded text-[#8b949e]">
+                {k}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mt-2 text-[10px] font-mono text-[#8b949e]">
         {isSelected ? '▼ console open' : '▶ click for console'}
       </div>
