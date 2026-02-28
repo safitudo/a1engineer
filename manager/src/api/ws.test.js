@@ -368,6 +368,24 @@ describe('WebSocket console.* handlers', () => {
       ws.close()
       vi.useRealTimers()
     })
+
+    it('rejects console.attach for a team owned by a different tenant', async () => {
+      // Create a team belonging to a different tenant
+      const OTHER_TENANT = { id: 'other-tenant-99', apiKey: 'other-key-99' }
+      const otherTeam = createTeam(
+        { name: 'other-tenant-team', agents: [{ id: 'other-agent-1', role: 'dev', model: 'claude-opus-4-6' }] },
+        { tenantId: OTHER_TENANT.id },
+      )
+
+      // WS client authenticates as TENANT (console-tenant-1), not OTHER_TENANT
+      const ws = await authenticatedWs()
+      const resp = await sendAndReceive(ws, { type: 'console.attach', teamId: otherTeam.id, agentId: 'other-agent-1' })
+      expect(resp.type).toBe('error')
+      expect(resp.code).toBe('NOT_FOUND')
+
+      ws.close()
+      deleteTeam(otherTeam.id)
+    })
   })
 
   // ── console.input ───────────────────────────────────────────────────────────
