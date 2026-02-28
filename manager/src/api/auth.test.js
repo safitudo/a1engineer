@@ -146,3 +146,27 @@ describe('POST /api/auth/ws-token', () => {
     expect(r1.body.token).not.toBe(r2.body.token)
   })
 })
+
+// ── Sweep interval tests ──────────────────────────────────────────────────────
+
+describe('wsTokenStore sweep', () => {
+  it('removes expired tokens after the 60s sweep fires', async () => {
+    const now = Date.now()
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(now)
+
+    // Issue a token (captured before time advances, so it lands in wsTokenStore)
+    const { body } = await request('POST', '/api/auth/ws-token', {
+      headers: { Authorization: 'Bearer key-sweep-test' },
+    })
+    const { token } = body
+    expect(typeof token).toBe('string')
+
+    // Advance past TTL and trigger the sweep interval
+    vi.setSystemTime(now + 61_000)
+    vi.runAllTimers()
+
+    // The sweep should have evicted the token — validateWsToken must return null
+    expect(validateWsToken(token)).toBeNull()
+  })
+})

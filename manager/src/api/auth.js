@@ -8,6 +8,17 @@ const router = Router()
 /** @type {Map<string, { tenantId: string, expiresAt: number }>} */
 const wsTokenStore = new Map()
 
+// Sweep expired tokens every 60s to prevent unbounded memory growth from
+// tokens that were issued but never consumed (client disconnected, etc.).
+const _sweepInterval = setInterval(() => {
+  const now = Date.now()
+  for (const [token, entry] of wsTokenStore) {
+    if (now > entry.expiresAt) wsTokenStore.delete(token)
+  }
+}, 60_000)
+// Allow the process to exit without this timer keeping the event loop alive
+_sweepInterval.unref()
+
 /**
  * Validate a single-use WS token.
  * Returns tenantId if valid and unexpired, null otherwise.
