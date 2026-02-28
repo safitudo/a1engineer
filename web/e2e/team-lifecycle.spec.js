@@ -257,6 +257,46 @@ test.describe.serial('Team lifecycle', () => {
     await expect(page.getByRole('heading', { name: 'cancel-test' })).toBeVisible()
   })
 
+  test('delete team from settings redirects to /dashboard', async ({ page }) => {
+    const team = {
+      id: 'delete-team-1',
+      name: 'delete-test',
+      status: 'stopped',
+      channels: ['#main'],
+      agents: [],
+      repo: { url: 'https://github.com/org/repo', branch: 'main' },
+      ergo: { port: 6667 },
+    }
+
+    await authenticate(page)
+    await page.route('/api/teams/delete-team-1', async route => {
+      if (route.request().method() === 'DELETE') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true }),
+        })
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(team),
+        })
+      }
+    })
+
+    await page.goto('/dashboard/teams/delete-team-1/settings')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+
+    page.on('dialog', dialog => dialog.accept())
+    await page.getByRole('button', { name: 'Stop Team' }).click()
+
+    await page.waitForURL('**/dashboard')
+    await expect(page).toHaveURL(/\/dashboard$/)
+  })
+
   test('wizard shows error when team creation fails with 500', async ({ page }) => {
     await page.route('/api/teams', async route => {
       if (route.request().method() === 'POST') {
