@@ -40,6 +40,9 @@ router.post('/', async (req, res) => {
     await startTeam(team, { apiKey: config.auth?.apiKey })
     teamStore.updateTeam(team.id, { status: 'running' })
     createGateway(team, { onMessage: routeMessage })
+    // Inject fresh GitHub tokens into containers (5s delay for containers to be ready)
+    const tokenRefresh = req.app.get('tokenRefresh')
+    if (tokenRefresh?.refreshNow) tokenRefresh.refreshNow()
     return res.status(201).json(teamStore.getTeam(team.id))
   } catch (err) {
     teamStore.deleteTeam(team.id)

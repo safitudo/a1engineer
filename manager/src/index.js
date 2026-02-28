@@ -182,8 +182,9 @@ async function main() {
       })
       attachWebSocketServer(server)
       startNudger()
-      // Token refresh must start AFTER rehydration populates the team store
-      setTimeout(() => startTokenRefresh(), 5000)
+      const tokenRefresh = startTokenRefresh()
+      // Expose refreshNow so team creation can trigger immediate token injection
+      app.set('tokenRefresh', tokenRefresh)
       break
     }
 

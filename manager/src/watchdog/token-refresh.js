@@ -19,11 +19,13 @@ const REFRESH_INTERVAL = 45 * 60 * 1000 // 45 minutes
 export function startTokenRefresh() {
   console.log('[token-refresh] started (every 45 min)')
 
-  // Delay first refresh to let containers start, then on interval
-  setTimeout(refresh, 30_000)
   const interval = setInterval(refresh, REFRESH_INTERVAL)
 
-  return { stop: () => clearInterval(interval) }
+  return {
+    stop: () => clearInterval(interval),
+    /** Call after a team starts to inject tokens immediately */
+    refreshNow: () => setTimeout(refresh, 5_000),
+  }
 }
 
 async function refresh() {
