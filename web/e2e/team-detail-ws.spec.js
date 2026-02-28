@@ -109,7 +109,7 @@ test.describe('Team Detail page — agent console', () => {
     await agentCard.click()
 
     // Console panel opens
-    await expect(page.getByText('▼ console open')).toBeVisible()
+    await expect(page.getByText('▼ console + activity')).toBeVisible()
     // AgentConsole renders with "live" badge
     await expect(page.getByText('live')).toBeVisible()
   })
@@ -123,7 +123,7 @@ test.describe('Team Detail page — agent console', () => {
 
     // Open console
     await agentCard.click()
-    await expect(page.getByText('▼ console open')).toBeVisible()
+    await expect(page.getByText('▼ console + activity')).toBeVisible()
 
     // Close via ✕ button
     await page.getByTitle('Close console').click()
@@ -189,6 +189,106 @@ test.describe('Team Detail page — IRC feed', () => {
     await page.waitForLoadState('networkidle')
 
     await expect(page.getByText('connecting')).toBeVisible()
+  })
+})
+
+test.describe('Team Detail page — real-time agent status', () => {
+  test('heartbeat WS event updates last_heartbeat on agent card', async ({ page }) => {
+    const wsMockReady = setupWSMock(page)
+    await gotoTeamDetail(page)
+    const send = await wsMockReady
+
+    // Verify agent card is visible
+    await expect(page.getByText('test-team-dev')).toBeVisible()
+
+    // Inject a heartbeat — timestamp well in the past so "last seen" changes
+    const ts = new Date(Date.now() - 5000).toISOString()
+    await send({
+      type: 'heartbeat',
+      teamId: TEAM_ID,
+      agentId: 'test-team-dev',
+      timestamp: ts,
+    })
+
+    // The "last seen" text should reflect seconds-ago (not "never")
+    await expect(page.getByText(/last seen: \ds ago/)).toBeVisible()
+  })
+
+  test('agent_status stalled shows stalled indicator on agent card', async ({ page }) => {
+    const wsMockReady = setupWSMock(page)
+    await gotoTeamDetail(page)
+    const send = await wsMockReady
+
+    await expect(page.getByText('test-team-dev')).toBeVisible()
+
+    await send({
+      type: 'agent_status',
+      teamId: TEAM_ID,
+      agentId: 'test-team-dev',
+      status: 'stalled',
+    })
+
+    await expect(page.getByText('stalled (nudged)')).toBeVisible()
+  })
+
+  test('agent_status killed removes agent card from the list', async ({ page }) => {
+    const wsMockReady = setupWSMock(page)
+    await gotoTeamDetail(page)
+    const send = await wsMockReady
+
+    await expect(page.getByText('test-team-dev')).toBeVisible()
+
+    await send({
+      type: 'agent_status',
+      teamId: TEAM_ID,
+      agentId: 'test-team-dev',
+      status: 'killed',
+    })
+
+    await expect(page.getByText('test-team-dev')).not.toBeVisible()
+    // Empty state should appear
+    await expect(page.getByText('No agents configured.')).toBeVisible()
+  })
+
+  test('agent_status spawned triggers refetch and new agent appears', async ({ page }) => {
+    const wsMockReady = setupWSMock(page)
+
+    // Initial team has one agent; after spawn refetch returns two
+    const updatedTeam = {
+      ...SAMPLE_TEAM,
+      agents: [
+        ...SAMPLE_TEAM.agents,
+        {
+          id: 'test-team-qa',
+          role: 'qa',
+          model: 'claude-haiku-4-5-20251001',
+          runtime: 'claude-code',
+          last_heartbeat: new Date().toISOString(),
+        },
+      ],
+    }
+
+    await gotoTeamDetail(page)
+    const send = await wsMockReady
+
+    // Override the GET /api/teams/:id to return updatedTeam on the next call
+    await page.route(`/api/teams/${TEAM_ID}`, route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(updatedTeam),
+      })
+    )
+
+    await send({
+      type: 'agent_status',
+      teamId: TEAM_ID,
+      agentId: 'test-team-qa',
+      status: 'spawned',
+    })
+
+    // New agent card should appear after refetch
+    await expect(page.getByText('test-team-qa')).toBeVisible()
   })
 })
 

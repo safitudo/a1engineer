@@ -36,12 +36,13 @@ export default function IrcFeed({ teamId, channels }) {
   useEffect(() => {
     if (!addListener) return
     return addListener('message', (msg) => {
+      if (channels && !channels.includes(msg.channel)) return
       setMessages(prev => {
         const next = [...prev, msg]
         return next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next
       })
     })
-  }, [addListener])
+  }, [addListener, channels])
 
   // Clear message log when switching teams
   useEffect(() => {
