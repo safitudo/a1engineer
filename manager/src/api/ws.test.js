@@ -338,6 +338,22 @@ describe('WebSocket console.* handlers', () => {
       ws.close()
     })
 
+    it('rejects data longer than 4096 chars', async () => {
+      const ws = await authenticatedWs()
+      const resp = await sendAndReceive(ws, { type: 'console.input', agentId: testAgent.id, data: 'x'.repeat(4097) })
+      expect(resp.type).toBe('error')
+      expect(resp.code).toBe('PAYLOAD_TOO_LARGE')
+      ws.close()
+    })
+
+    it('accepts data of exactly 4096 chars (not yet attached — NOT_ATTACHED, not PAYLOAD_TOO_LARGE)', async () => {
+      const ws = await authenticatedWs()
+      const resp = await sendAndReceive(ws, { type: 'console.input', agentId: testAgent.id, data: 'x'.repeat(4096) })
+      expect(resp.type).toBe('error')
+      expect(resp.code).toBe('NOT_ATTACHED')
+      ws.close()
+    })
+
     it('calls execFileAsync with send-keys command when attached', async () => {
       const ws = await authenticatedWs()
       await sendAndReceive(ws, { type: 'console.attach', teamId: testTeam.id, agentId: testAgent.id })
