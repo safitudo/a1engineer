@@ -96,6 +96,28 @@ export class IrcGateway extends EventEmitter {
     this.#client.say(channel, text)
   }
 
+  /**
+   * Dynamically update the channels this gateway subscribes to.
+   * Computes a join/part diff against the current set and issues IRC
+   * commands immediately if connected. Safe to call before connect() —
+   * the new channel list is stored and applied on the next connect().
+   */
+  updateChannels(newChannels) {
+    const toJoin = newChannels.filter(ch => !this.#channels.includes(ch))
+    const toPart = this.#channels.filter(ch => !newChannels.includes(ch))
+
+    this.#channels = newChannels
+
+    if (!this.#client || this.#destroyed) return
+
+    for (const ch of toPart) {
+      this.#client.part(ch)
+    }
+    for (const ch of toJoin) {
+      this.#client.join(ch)
+    }
+  }
+
   destroy() {
     this.#destroyed = true
     if (this.#reconnectTimer) {
