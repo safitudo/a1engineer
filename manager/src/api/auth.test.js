@@ -75,7 +75,7 @@ function request(method, path, { headers = {}, body } = {}) {
 // behaviour. Direct import is also fine but would share module state with the
 // HTTP-server instance — using the same in-process module is intentional.
 
-import { validateWsToken, signupAttempts } from './auth.js'
+import { validateWsToken, signupAttempts, loginAttempts } from './auth.js'
 
 describe('validateWsToken', () => {
   it('returns null for an unknown token', () => {
@@ -287,5 +287,80 @@ describe('POST /api/auth/signup rate limiting', () => {
 
     // Window was reset — count is now 1 (fresh window)
     expect(signupAttempts.get(ip).count).toBe(1)
+  })
+})
+
+// ── POST /api/auth/login rate limiting ────────────────────────────────────────
+
+describe('POST /api/auth/login rate limiting', () => {
+  // Each test uses a unique fake IP via X-Forwarded-For to avoid cross-test state
+
+  it('returns 429 on the 11th login from the same IP within 60s', async () => {
+    const ip = '10.1.0.1'
+    loginAttempts.delete(ip)
+    for (let i = 0; i < 10; i++) {
+      const { status } = await request('POST', '/api/auth/login', {
+        headers: { 'x-forwarded-for': ip, Authorization: 'Bearer test-key-rl' },
+      })
+      expect(status).toBe(200)
+    }
+    const { status, body } = await request('POST', '/api/auth/login', {
+      headers: { 'x-forwarded-for': ip, Authorization: 'Bearer test-key-rl' },
+    })
+    expect(status).toBe(429)
+    expect(body.code).toBe('RATE_LIMITED')
+  })
+
+  it('allows requests again after the 60s window expires', async () => {
+    const ip = '10.1.0.2'
+    loginAttempts.delete(ip)
+    const now = Date.now()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(now)
+
+    // Exhaust the limit
+    for (let i = 0; i < 10; i++) {
+      await request('POST', '/api/auth/login', {
+        headers: { 'x-forwarded-for': ip, Authorization: 'Bearer test-key-rl2' },
+      })
+    }
+    const { status: blockedStatus } = await request('POST', '/api/auth/login', {
+      headers: { 'x-forwarded-for': ip, Authorization: 'Bearer test-key-rl2' },
+    })
+    expect(blockedStatus).toBe(429)
+
+    // Advance past the 60s window
+    vi.setSystemTime(now + 60_001)
+
+    const { status: allowedStatus } = await request('POST', '/api/auth/login', {
+      headers: { 'x-forwarded-for': ip, Authorization: 'Bearer test-key-rl2' },
+    })
+    expect(allowedStatus).toBe(200)
+  })
+
+  it('counts IPs independently — different IPs are not affected by each other', async () => {
+    const ipA = '10.1.0.3'
+    const ipB = '10.1.0.4'
+    loginAttempts.delete(ipA)
+    loginAttempts.delete(ipB)
+
+    // Exhaust IP A
+    for (let i = 0; i < 10; i++) {
+      await request('POST', '/api/auth/login', {
+        headers: { 'x-forwarded-for': ipA, Authorization: 'Bearer test-key-rl3' },
+      })
+    }
+
+    // IP A is blocked
+    const { status: blockedA } = await request('POST', '/api/auth/login', {
+      headers: { 'x-forwarded-for': ipA, Authorization: 'Bearer test-key-rl3' },
+    })
+    expect(blockedA).toBe(429)
+
+    // IP B is unaffected
+    const { status: okB } = await request('POST', '/api/auth/login', {
+      headers: { 'x-forwarded-for': ipB, Authorization: 'Bearer test-key-rl3' },
+    })
+    expect(okB).toBe(200)
   })
 })
