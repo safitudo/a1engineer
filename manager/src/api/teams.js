@@ -1,8 +1,11 @@
 import { Router } from 'express'
+import { spawn } from 'child_process'
+import { join } from 'path'
 import * as teamStore from '../store/teams.js'
 import { startTeam, stopTeam, rehydrateTeams } from '../orchestrator/compose.js'
 import { createGateway, destroyGateway, getGateway } from '../irc/gateway.js'
 import { routeMessage, clearTeamBuffers } from '../irc/router.js'
+import { TEAMS_DIR } from '../constants.js'
 
 const router = Router()
 
@@ -163,6 +166,50 @@ router.get('/:id/overview', (req, res) => {
     autoNudge: team.autoNudge ?? { enabled: true },
     checkedAt: new Date().toISOString(),
   })
+})
+
+// GET /api/teams/:id/logs — stream docker compose logs as SSE
+router.get('/:id/logs', (req, res) => {
+  if (!checkTeamScope(req, res)) return
+  const team = teamStore.getTeam(req.params.id)
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  if (req.tenantId && team.tenantId && team.tenantId !== req.tenantId) {
+    return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  }
+  if (req.tenantId && !team.tenantId) {
+    teamStore.updateTeam(team.id, { tenantId: req.tenantId })
+  }
+
+  const follow = req.query.follow === 'true'
+  const tail = Math.max(1, parseInt(req.query.tail ?? '100', 10) || 100)
+  const composePath = join(TEAMS_DIR, req.params.id, 'docker-compose.yml')
+
+  const args = ['compose', '-f', composePath, 'logs', '--no-color', `--tail=${tail}`]
+  if (follow) args.push('--follow')
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+
+  const proc = spawn('docker', args)
+
+  function sendLines(chunk) {
+    const lines = chunk.toString().split('\n')
+    for (const line of lines) {
+      if (line) res.write(`data: ${line}\n\n`)
+    }
+  }
+
+  proc.stdout.on('data', sendLines)
+  proc.stderr.on('data', sendLines)
+
+  proc.on('close', () => {
+    res.write('event: done\ndata: end\n\n')
+    res.end()
+  })
+
+  req.on('close', () => proc.kill())
 })
 
 // POST /api/teams/rehydrate — rebuild in-memory store from TEAMS_DIR

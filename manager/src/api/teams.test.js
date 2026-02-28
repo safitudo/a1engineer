@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import http from 'http'
+import { EventEmitter } from 'events'
 import { createApp } from './index.js'
 import { listTeams, deleteTeam, restoreTeam, getTeam } from '../store/teams.js'
 import { readMessages } from '../irc/router.js'
@@ -24,6 +25,12 @@ vi.mock('../irc/router.js', () => ({
   clearTeamBuffers: vi.fn(),
   readMessages: vi.fn().mockReturnValue([]),
 }))
+
+// Mock child_process.spawn to avoid real docker calls in logs tests
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal()
+  return { ...actual, spawn: vi.fn() }
+})
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
@@ -578,6 +585,99 @@ describe('rehydrated team access', () => {
     expect(res.status).toBe(200)
     expect(res.body.teamId).toBe('rehydrated-team-3')
     expect(res.body.agentCount).toBe(1)
+  })
+})
+
+// ── GET /api/teams/:id/logs ───────────────────────────────────────────────────
+
+// Helper to make a request and collect streamed response
+function streamRequest(port, path) {
+  return new Promise((resolve, reject) => {
+    const opts = {
+      hostname: '127.0.0.1', port, path, method: 'GET',
+      headers: { 'Authorization': 'Bearer test-api-key-123' },
+    }
+    const req = http.request(opts, (res) => {
+      let data = ''
+      res.on('data', (c) => { data += c })
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }))
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+describe('GET /api/teams/:id/logs', () => {
+  it('returns 404 for unknown team', async () => {
+    const res = await get(port, '/api/teams/nope/logs')
+    expect(res.status).toBe(404)
+    expect(res.body.code).toBe('NOT_FOUND')
+  })
+
+  it('streams logs as SSE for valid team', async () => {
+    const { spawn } = await import('child_process')
+
+    const mockProc = new EventEmitter()
+    mockProc.stdout = new EventEmitter()
+    mockProc.stderr = new EventEmitter()
+    mockProc.kill = vi.fn()
+    spawn.mockReturnValueOnce(mockProc)
+
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+
+    const res = await new Promise((resolve, reject) => {
+      const opts = {
+        hostname: '127.0.0.1', port, path: `/api/teams/${teamId}/logs`, method: 'GET',
+        headers: { 'Authorization': 'Bearer test-api-key-123' },
+      }
+      const req = http.request(opts, (r) => {
+        let data = ''
+        r.on('data', (c) => { data += c })
+        r.on('end', () => resolve({ status: r.statusCode, headers: r.headers, body: data }))
+      })
+      req.on('error', reject)
+      req.end()
+
+      setTimeout(() => {
+        mockProc.stdout.emit('data', Buffer.from('agent-dev | hello\n'))
+        mockProc.emit('close', 0)
+      }, 20)
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toContain('text/event-stream')
+    expect(res.body).toContain('data: agent-dev | hello')
+  })
+
+  it('passes --follow flag when follow=true', async () => {
+    const { spawn } = await import('child_process')
+
+    const mockProc = new EventEmitter()
+    mockProc.stdout = new EventEmitter()
+    mockProc.stderr = new EventEmitter()
+    mockProc.kill = vi.fn()
+    spawn.mockReturnValueOnce(mockProc)
+
+    const created = await post(port, '/api/teams', VALID_TEAM)
+    const teamId = created.body.id
+
+    const reqDone = new Promise((resolve, reject) => {
+      const opts = {
+        hostname: '127.0.0.1', port, path: `/api/teams/${teamId}/logs?follow=true`, method: 'GET',
+        headers: { 'Authorization': 'Bearer test-api-key-123' },
+      }
+      const req = http.request(opts, (r) => {
+        r.on('data', () => {})
+        r.on('end', () => resolve())
+      })
+      req.on('error', reject)
+      req.end()
+      setTimeout(() => mockProc.emit('close', 0), 20)
+    })
+
+    await reqDone
+    expect(spawn).toHaveBeenCalledWith('docker', expect.arrayContaining(['--follow']))
   })
 })
 
