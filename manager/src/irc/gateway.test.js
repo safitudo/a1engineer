@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { IrcGateway } from './gateway.js'
 
+// ── Mock channels store (gateway imports listTeamChannels for channelId lookup) ──
+
+vi.mock('../store/channels.js', () => ({
+  listTeamChannels: vi.fn().mockReturnValue([
+    { id: 'ch-main', name: '#main' },
+    { id: 'ch-tasks', name: '#tasks' },
+  ]),
+}))
+
 // ── Mock irc-framework ───────────────────────────────────────────────────────
 
 const mockClient = {

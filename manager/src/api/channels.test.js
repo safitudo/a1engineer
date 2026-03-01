@@ -27,6 +27,9 @@ vi.mock('../irc/router.js', () => ({
 
 // Mock channels store to provide fake channel IDs
 vi.mock('../store/channels.js', () => ({
+  createChannel: vi.fn().mockReturnValue({ channel: { id: 'ch-new', name: '#main' } }),
+  addTeamChannel: vi.fn(),
+  findTeamsByChannelId: vi.fn().mockReturnValue([]),
   listTeamChannels: vi.fn().mockReturnValue([
     { id: 'ch-main', name: '#main' },
     { id: 'ch-tasks', name: '#tasks' },
