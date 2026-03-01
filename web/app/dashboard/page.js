@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
 const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8080'
