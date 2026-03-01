@@ -34,7 +34,7 @@ test.describe('Dashboard — authenticated', () => {
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Teams', exact: true })).toBeVisible()
     await expect(page.getByRole('link', { name: /New Team/i })).toBeVisible()
   })
 
@@ -79,8 +79,8 @@ test.describe('Dashboard — authenticated', () => {
 
     await expect(page.getByRole('heading', { name: 'Alpha Squad' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Beta Team' })).toBeVisible()
-    await expect(page.getByText('running')).toBeVisible()
-    await expect(page.getByText('stopped')).toBeVisible()
+    await expect(page.getByText('running').first()).toBeVisible()
+    await expect(page.getByText('stopped').first()).toBeVisible()
   })
 
   test('shows error state when API call fails', async ({ page }) => {
