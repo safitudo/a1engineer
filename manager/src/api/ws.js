@@ -57,11 +57,12 @@ export function broadcastAgentStatus(teamId, agentId, status) {
  * subscribers of that team).  The dashboard needs this to update team cards.
  * status: 'created' | 'running' | 'stopped' | 'deleted' | 'error'
  */
-export function broadcastTeamStatus(teamId, status, extra = {}) {
+export function broadcastTeamStatus(teamId, status, tenantId, extra = {}) {
   const payload = JSON.stringify({ type: 'team_status', teamId, status, ...extra })
-  // Fan out to every authenticated client, regardless of subscription
+  // Fan out to authenticated clients of the same tenant only
   for (const [, clients] of subscriptions) {
     for (const ws of clients) {
+      if (ws.tenant?.id !== tenantId) continue
       if (ws.readyState === WS_OPEN && ws.bufferedAmount === 0) {
         ws.send(payload)
       }
@@ -69,6 +70,7 @@ export function broadcastTeamStatus(teamId, status, extra = {}) {
   }
   // Also send to authenticated clients that haven't subscribed to any team yet
   for (const ws of authenticatedClients) {
+    if (ws.tenant?.id !== tenantId) continue
     if (ws.readyState === WS_OPEN && ws.bufferedAmount === 0) {
       ws.send(payload)
     }
