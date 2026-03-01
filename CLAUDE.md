@@ -149,7 +149,7 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **E2E Test Expansion** — PRs #141, #142
 - **CI Workflow** — PR #149
 - **M1 — SQLite Migration** (phases 1-5) — PRs #150, #151, #156, #159
-- **M2 — Decouple Communication Channels Phase 1** — PR #162
+- **M2 — Decouple Communication Channels Phase 1** — PR #162 (partial; full M2 in progress)
 - **M3 — Dynamic Agent Add/Remove** — PR #169
 - **M4 — Interactive Mode + Chuck Fix** (writeFifo, stall broadcasts) — PRs #170, #176, #177
 - **M5 — API Auth Hardening** (rate-limit, auth-gate, requireTeamScope) — PRs #186, #189, #215
@@ -160,8 +160,9 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 **M1 — Complete SQLite Migration** ✅ complete
 - Phases 1-5: teams.js, tenants.js, templates.js, cleanup — zero in-memory Maps for persistent state
 
-**M2 — Decouple Communication Channels** ✅ complete (Phase 1)
-- Channel store, GatewayRegistry abstraction, joinChannel/partChannel, buffer re-keying
+**M2 — Decouple Communication Channels** 🔄 in progress
+- Phase 1 (PR #162): channel store, GatewayRegistry abstraction, joinChannel/partChannel, buffer re-keying
+- Remaining: teams subscribe to channels (many-to-many), cross-team comms via shared gateway
 
 **M3 — Dynamic Agent Add/Remove** ✅ complete
 - Per-agent docker compose up/down, git worktree init for new agents, compose rewrite on removal
