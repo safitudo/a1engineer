@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-
-const MANAGER_URL = process.env.MANAGER_API_URL ?? 'http://localhost:8080'
+import { MANAGER_URL } from '../../../../lib/config'
 
 export async function POST(req) {
   const { apiKey } = await req.json()

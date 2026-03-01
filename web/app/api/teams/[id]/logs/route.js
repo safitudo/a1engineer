@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers'
-
-const MANAGER_URL = process.env.MANAGER_API_URL ?? 'http://localhost:8080'
+import { MANAGER_URL } from '../../../../../lib/config'
 
 export async function GET(req, { params }) {
   const cookieStore = await cookies()
