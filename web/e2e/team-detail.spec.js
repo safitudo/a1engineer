@@ -117,7 +117,7 @@ test.describe('Team Detail — authenticated', () => {
     await expect(page.getByText('▼ console + activity')).toBeVisible()
 
     // Click again to collapse
-    await page.getByText('agent-dev').click()
+    await page.getByText('agent-dev').first().click()
     await expect(page.getByText('▼ console + activity')).not.toBeVisible()
     await expect(page.getByText('▶ click for console').first()).toBeVisible()
   })

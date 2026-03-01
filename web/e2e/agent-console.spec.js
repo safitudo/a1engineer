@@ -154,7 +154,7 @@ test.describe('AgentConsole — open and close', () => {
     await expect(page.getByText('▼ console + activity')).toBeVisible()
 
     // Close by clicking the card again
-    await page.getByText('agent-dev').click()
+    await page.getByText('agent-dev').first().click()
     await expect(page.getByText('▼ console + activity')).not.toBeVisible()
     await expect(page.getByText('live')).not.toBeVisible()
     // Card returns to collapsed state
