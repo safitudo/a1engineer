@@ -26,6 +26,14 @@ vi.mock('../irc/router.js', () => ({
   readMessages: vi.fn().mockReturnValue([]),
 }))
 
+// Mock ws to avoid WebSocket server setup in tests
+vi.mock('./ws.js', () => ({
+  broadcastTeamStatus: vi.fn(),
+  broadcastHeartbeat: vi.fn(),
+  broadcastAgentStatus: vi.fn(),
+  attachWebSocketServer: vi.fn(),
+}))
+
 // Mock child_process.spawn to avoid real docker calls in logs tests
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal()

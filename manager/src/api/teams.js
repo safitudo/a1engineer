@@ -249,6 +249,7 @@ router.post('/:id/start', requireTeam, async (req, res) => {
 
 // DELETE /api/teams/:id — teardown compose stack + remove from store
 router.delete('/:id', requireTeam, async (req, res) => {
+  const { team } = req
   destroyGateway(req.params.id)
   try {
     await stopTeam(req.params.id)
