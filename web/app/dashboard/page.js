@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
+const WS_BASE = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8080'
+
 function StatusBadge({ status }) {
   const styles = {
     running: 'bg-[#3fb950]/15 text-[#3fb950] border-[#3fb950]/30',
@@ -100,6 +102,85 @@ export default function DashboardPage() {
         setError(err.message)
         setLoading(false)
       })
+  }, [])
+
+  // ── Real-time team status via WebSocket ───────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    let retryTimeout = null
+    let retryDelay = 1000
+
+    async function connect() {
+      let token = ''
+      try {
+        const res = await fetch('/api/auth/ws-token')
+        if (res.ok) {
+          const data = await res.json()
+          token = data.token ?? ''
+        }
+      } catch {}
+      if (cancelled) return
+
+      const ws = new WebSocket(`${WS_BASE}/ws`)
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'auth', token }))
+      }
+
+      ws.onmessage = (event) => {
+        let msg
+        try { msg = JSON.parse(event.data) } catch { return }
+
+        if (msg.type === 'authenticated') {
+          retryDelay = 1000
+        }
+
+        if (msg.type === 'team_status') {
+          setTeams(prev => {
+            if (msg.status === 'deleted') {
+              return prev.filter(t => t.id !== msg.teamId)
+            }
+            const idx = prev.findIndex(t => t.id === msg.teamId)
+            if (idx >= 0) {
+              const updated = [...prev]
+              updated[idx] = { ...updated[idx], status: msg.status }
+              return updated
+            }
+            // New team created — refetch full list to get complete data
+            if (msg.status === 'running' && idx < 0) {
+              fetch('/api/teams')
+                .then(r => r.ok ? r.json() : null)
+                .then(data => { if (data && !cancelled) setTeams(Array.isArray(data) ? data : []) })
+                .catch(() => {})
+            }
+            return prev
+          })
+        }
+      }
+
+      ws.onclose = () => {
+        if (cancelled) return
+        retryTimeout = setTimeout(() => {
+          if (!cancelled) {
+            retryDelay = Math.min(retryDelay * 2, 30_000)
+            connect()
+          }
+        }, retryDelay)
+      }
+
+      ws.onerror = () => {}
+
+      wsRef.current = ws
+    }
+
+    const wsRef = { current: null }
+    connect()
+
+    return () => {
+      cancelled = true
+      clearTimeout(retryTimeout)
+      wsRef.current?.close()
+    }
   }, [])
 
   return (
