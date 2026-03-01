@@ -4,7 +4,7 @@
  * Covers:
  *   1. Agent card click expands the AgentConsole panel
  *   2. IRC feed renders messages received over WebSocket
- *   3. Stop Team button sends DELETE and redirects to dashboard
+ *   3. Stop Team button sends POST /stop and updates button state
  */
 import { test, expect } from '@playwright/test'
 
@@ -293,13 +293,13 @@ test.describe('Team Detail page — real-time agent status', () => {
 })
 
 test.describe('Team Detail page — Stop Team button', () => {
-  test('sends DELETE request and redirects to /dashboard on success', async ({ page }) => {
+  test('sends POST /stop and updates button to Start Team on success', async ({ page }) => {
     const wsMockReady = setupWSMock(page)
     await gotoTeamDetail(page)
     await wsMockReady
 
-    await page.route(`/api/teams/${TEAM_ID}`, route => {
-      if (route.request().method() === 'DELETE') {
+    await page.route(`/api/teams/${TEAM_ID}/stop`, route => {
+      if (route.request().method() === 'POST') {
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
       } else {
         route.continue()
@@ -311,17 +311,16 @@ test.describe('Team Detail page — Stop Team button', () => {
 
     await page.getByRole('button', { name: 'Stop Team' }).click()
 
-    await page.waitForURL('**/dashboard')
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page.getByRole('button', { name: 'Start Team' })).toBeVisible()
   })
 
-  test('is disabled when team status is stopped', async ({ page }) => {
+  test('shows Start Team button when team status is stopped', async ({ page }) => {
     const wsMockReady = setupWSMock(page)
     await gotoTeamDetail(page, { ...SAMPLE_TEAM, status: 'stopped' })
     await wsMockReady
 
-    const stopBtn = page.getByRole('button', { name: 'Stop Team' })
-    await expect(stopBtn).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Start Team' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Start Team' })).toBeEnabled()
   })
 
   test('stays on page and shows Stopping… while request is in flight', async ({ page }) => {
@@ -329,14 +328,9 @@ test.describe('Team Detail page — Stop Team button', () => {
     await gotoTeamDetail(page)
     await wsMockReady
 
-    // Delay the DELETE response
-    await page.route(`/api/teams/${TEAM_ID}`, route => {
-      if (route.request().method() === 'DELETE') {
-        // Never fulfill — keeps button in "Stopping…" state
-        // (test just checks the transient UI label)
-      } else {
-        route.continue()
-      }
+    // Never fulfill the POST /stop — keeps button in "Stopping…" state
+    await page.route(`/api/teams/${TEAM_ID}/stop`, () => {
+      // Never fulfill — keeps Stopping… visible
     })
 
     page.on('dialog', dialog => dialog.accept())
