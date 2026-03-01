@@ -3,6 +3,7 @@ import * as teamStore from '../store/teams.js'
 import { DEFAULT_CHANNELS } from '../store/teams.js'
 import { readMessages } from '../irc/router.js'
 import { getGateway } from '../irc/gateway.js'
+import { listTeamChannels } from '../store/channels.js'
 
 const router = Router({ mergeParams: true })
 
@@ -24,7 +25,10 @@ router.get('/:name/messages', resolveTeam, (req, res) => {
   const limit = Number(req.query.limit) || 100
   const since = req.query.since || undefined
   const channel = `#${req.params.name}`
-  res.json(readMessages(req.team.id, channel, { limit, since }))
+  const channels = listTeamChannels(req.team.id)
+  const ch = channels.find(c => c.name === channel)
+  if (!ch) return res.json([])
+  res.json(readMessages(ch.id, { limit, since }))
 })
 
 // POST /api/teams/:id/channels/:name/messages — send message (via IRC gateway)

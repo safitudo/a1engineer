@@ -118,6 +118,28 @@ export class IrcGateway extends EventEmitter {
     }
   }
 
+  /**
+   * Join a single channel at runtime. No-op if already in the channel list.
+   * Issues the IRC JOIN command immediately if connected.
+   */
+  joinChannel(name) {
+    if (!this.#channels.includes(name)) {
+      this.#channels = [...this.#channels, name]
+    }
+    if (!this.#client || this.#destroyed) return
+    this.#client.join(name)
+  }
+
+  /**
+   * Part a single channel at runtime. Removes it from the channel list and
+   * issues the IRC PART command immediately if connected.
+   */
+  partChannel(name) {
+    this.#channels = this.#channels.filter(ch => ch !== name)
+    if (!this.#client || this.#destroyed) return
+    this.#client.part(name)
+  }
+
   destroy() {
     this.#destroyed = true
     if (this.#reconnectTimer) {

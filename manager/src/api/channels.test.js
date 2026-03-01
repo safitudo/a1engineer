@@ -25,6 +25,17 @@ vi.mock('../irc/router.js', () => ({
   listChannels: vi.fn().mockReturnValue([]),
 }))
 
+// Mock channels store to provide fake channel IDs
+vi.mock('../store/channels.js', () => ({
+  listTeamChannels: vi.fn().mockReturnValue([
+    { id: 'ch-main', name: '#main' },
+    { id: 'ch-tasks', name: '#tasks' },
+    { id: 'ch-code', name: '#code' },
+    { id: 'ch-testing', name: '#testing' },
+    { id: 'ch-merges', name: '#merges' },
+  ]),
+}))
+
 // ── HTTP helpers ───────────────────────────────────────────────────────────────
 
 function request(port, method, path, body) {
@@ -158,12 +169,12 @@ describe('GET /api/teams/:id/channels/:name/messages', () => {
     expect(res.body).toEqual(messages)
   })
 
-  it('calls readMessages with team id and hashed channel name', async () => {
+  it('calls readMessages with channel id', async () => {
     const { readMessages } = await import('../irc/router.js')
     const teamId = await createTeam()
 
     await get(port, `/api/teams/${teamId}/channels/tasks/messages`)
-    expect(readMessages).toHaveBeenCalledWith(teamId, '#tasks', { limit: 100, since: undefined })
+    expect(readMessages).toHaveBeenCalledWith('ch-tasks', { limit: 100, since: undefined })
   })
 
   it('passes limit query param to readMessages', async () => {
@@ -171,7 +182,7 @@ describe('GET /api/teams/:id/channels/:name/messages', () => {
     const teamId = await createTeam()
 
     await get(port, `/api/teams/${teamId}/channels/main/messages?limit=50`)
-    expect(readMessages).toHaveBeenCalledWith(teamId, '#main', { limit: 50, since: undefined })
+    expect(readMessages).toHaveBeenCalledWith('ch-main', { limit: 50, since: undefined })
   })
 
   it('passes since query param to readMessages', async () => {
@@ -180,7 +191,7 @@ describe('GET /api/teams/:id/channels/:name/messages', () => {
     const since = '2024-06-15T12:00:00Z'
 
     await get(port, `/api/teams/${teamId}/channels/main/messages?since=${encodeURIComponent(since)}`)
-    expect(readMessages).toHaveBeenCalledWith(teamId, '#main', { limit: 100, since })
+    expect(readMessages).toHaveBeenCalledWith('ch-main', { limit: 100, since })
   })
 
   it('passes both limit and since when both are provided', async () => {
@@ -189,7 +200,7 @@ describe('GET /api/teams/:id/channels/:name/messages', () => {
     const since = '2024-06-15T12:00:00Z'
 
     await get(port, `/api/teams/${teamId}/channels/code/messages?limit=20&since=${encodeURIComponent(since)}`)
-    expect(readMessages).toHaveBeenCalledWith(teamId, '#code', { limit: 20, since })
+    expect(readMessages).toHaveBeenCalledWith('ch-code', { limit: 20, since })
   })
 
   it('returns empty array when buffer has no messages', async () => {
