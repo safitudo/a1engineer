@@ -22,12 +22,12 @@ export function upsertTenant(apiKey) {
   const db = getDb()
   const keyHash = hashKey(apiKey)
   const existing = db.prepare('SELECT * FROM tenants WHERE key_hash = ?').get(keyHash)
-  if (existing) return { ...rowToTenant(existing), apiKey }
+  if (existing) return rowToTenant(existing)
   const id = keyHash.slice(0, 16)
   const now = new Date().toISOString()
   db.prepare('INSERT INTO tenants (id, key_hash, name, email, created_at) VALUES (?, ?, ?, ?, ?)')
     .run(id, keyHash, null, null, now)
-  return { id, apiKey, createdAt: now }
+  return { id, createdAt: now }
 }
 
 export function findByApiKey(apiKey) {
@@ -35,7 +35,7 @@ export function findByApiKey(apiKey) {
   const keyHash = hashKey(apiKey)
   const row = db.prepare('SELECT * FROM tenants WHERE key_hash = ?').get(keyHash)
   if (!row) return null
-  return { ...rowToTenant(row), apiKey }
+  return rowToTenant(row)
 }
 
 // ── Signup: create tenant with generated key (shown once, stored hashed) ────
