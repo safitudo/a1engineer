@@ -149,7 +149,6 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **E2E Test Expansion** — PRs #141, #142
 - **CI Workflow** — PR #149
 - **M1 — SQLite Migration** (phases 1-5) — PRs #150, #151, #156, #159
-- **M2 — Decouple Communication Channels Phase 1** — PR #162 (partial; full M2 in progress)
 - **M3 — Dynamic Agent Add/Remove** — PR #169
 - **M4 — Interactive Mode + Chuck Fix** (writeFifo, stall broadcasts) — PRs #170, #176, #177
 - **M5 — API Auth Hardening** (rate-limit, auth-gate, requireTeamScope) — PRs #186, #189, #215
