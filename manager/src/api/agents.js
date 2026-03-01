@@ -15,17 +15,30 @@ function composeFile(teamId) {
 }
 const router = Router({ mergeParams: true })
 
-// GET /api/teams/:id/agents — list agents in team
-router.get('/', (req, res) => {
+// Middleware: resolve team by :id, 404 if missing
+function resolveTeam(req, res, next) {
   const team = teamStore.getTeam(req.params.id)
   if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-  res.json(team.agents)
+  req.team = team
+  next()
+}
+
+// Middleware: resolve agent by :agentId within req.team, 404 if missing
+function resolveAgent(req, res, next) {
+  const agent = req.team.agents.find((a) => a.id === req.params.agentId)
+  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
+  req.agent = agent
+  next()
+}
+
+// GET /api/teams/:id/agents — list agents in team
+router.get('/', resolveTeam, (req, res) => {
+  res.json(req.team.agents)
 })
 
 // POST /api/teams/:id/agents — spawn a new agent into the running team
-router.post('/', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+router.post('/', resolveTeam, async (req, res) => {
+  const team = req.team
 
   const { role, model, runtime, prompt, env } = req.body ?? {}
   if (!role || typeof role !== 'string') {
@@ -61,13 +74,8 @@ router.post('/', async (req, res) => {
 })
 
 // DELETE /api/teams/:id/agents/:agentId — kill a single agent container
-router.delete('/:agentId', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-
-  const agent = team.agents.find((a) => a.id === req.params.agentId)
-  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
-
+router.delete('/:agentId', resolveTeam, resolveAgent, async (req, res) => {
+  const { team, agent } = req
   const serviceName = `agent-${agent.id}`
   const cf = composeFile(team.id)
   try {
@@ -119,13 +127,8 @@ async function ptySend(teamId, agentId, message) {
 }
 
 // GET /api/teams/:id/agents/:agentId/screen — capture agent's tmux screen
-router.get('/:agentId/screen', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-
-  const agent = team.agents.find((a) => a.id === req.params.agentId)
-  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
-
+router.get('/:agentId/screen', resolveTeam, resolveAgent, async (req, res) => {
+  const { team, agent } = req
   try {
     const output = await dockerExec(team.id, agent.id, [
       'tmux', 'capture-pane', '-t', 'agent', '-p',
@@ -145,13 +148,8 @@ router.get('/:agentId/screen', async (req, res) => {
 })
 
 // GET /api/teams/:id/agents/:agentId/activity — git activity for agent
-router.get('/:agentId/activity', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-
-  const agent = team.agents.find((a) => a.id === req.params.agentId)
-  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
-
+router.get('/:agentId/activity', resolveTeam, resolveAgent, async (req, res) => {
+  const { team, agent } = req
   try {
     const [diffStat, log, branch, status] = await Promise.all([
       dockerExec(team.id, agent.id, ['git', 'diff', '--stat']).catch(() => ''),
@@ -175,13 +173,8 @@ router.get('/:agentId/activity', async (req, res) => {
 })
 
 // POST /api/teams/:id/agents/:agentId/nudge — send a message to agent via tmux
-router.post('/:agentId/nudge', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-
-  const agent = team.agents.find((a) => a.id === req.params.agentId)
-  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
-
+router.post('/:agentId/nudge', resolveTeam, resolveAgent, async (req, res) => {
+  const { team, agent } = req
   const { message } = req.body ?? {}
   const nudgeMsg = (typeof message === 'string' && message)
     ? message
@@ -197,13 +190,8 @@ router.post('/:agentId/nudge', async (req, res) => {
 })
 
 // POST /api/teams/:id/agents/:agentId/interrupt — send Ctrl+C to stop current execution
-router.post('/:agentId/interrupt', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-
-  const agent = team.agents.find((a) => a.id === req.params.agentId)
-  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
-
+router.post('/:agentId/interrupt', resolveTeam, resolveAgent, async (req, res) => {
+  const { team, agent } = req
   try {
     await writeFifo(team.id, agent.id, 'interrupt')
     return res.json({ ok: true, action: 'interrupt' })
@@ -214,13 +202,8 @@ router.post('/:agentId/interrupt', async (req, res) => {
 })
 
 // POST /api/teams/:id/agents/:agentId/directive — interrupt + send new instruction
-router.post('/:agentId/directive', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-
-  const agent = team.agents.find((a) => a.id === req.params.agentId)
-  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
-
+router.post('/:agentId/directive', resolveTeam, resolveAgent, async (req, res) => {
+  const { team, agent } = req
   const { message } = req.body ?? {}
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'message is required', code: 'MISSING_MESSAGE' })
@@ -236,13 +219,8 @@ router.post('/:agentId/directive', async (req, res) => {
 })
 
 // POST /api/teams/:id/agents/:agentId/exec — run arbitrary command inside agent container
-router.post('/:agentId/exec', async (req, res) => {
-  const team = teamStore.getTeam(req.params.id)
-  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-
-  const agent = team.agents.find((a) => a.id === req.params.agentId)
-  if (!agent) return res.status(404).json({ error: 'agent not found', code: 'AGENT_NOT_FOUND' })
-
+router.post('/:agentId/exec', resolveTeam, resolveAgent, async (req, res) => {
+  const { team, agent } = req
   const { command } = req.body ?? {}
   if (!command || !Array.isArray(command) || command.length === 0) {
     return res.status(400).json({ error: 'command is required (array of strings)', code: 'MISSING_COMMAND' })

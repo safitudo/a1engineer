@@ -6,42 +6,35 @@ import { getGateway } from '../irc/gateway.js'
 
 const router = Router({ mergeParams: true })
 
-function requireTeam(req, res) {
+// Middleware: resolve team by :id, 404 if missing
+function resolveTeam(req, res, next) {
   const team = teamStore.getTeam(req.params.id)
-  if (!team) {
-    res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
-    return null
-  }
-  return team
+  if (!team) return res.status(404).json({ error: 'team not found', code: 'NOT_FOUND' })
+  req.team = team
+  next()
 }
 
 // GET /api/teams/:id/channels — list channels for team
-router.get('/', (req, res) => {
-  const team = requireTeam(req, res)
-  if (!team) return
-  res.json((team.channels ?? DEFAULT_CHANNELS).map((name) => ({ name, team: team.id })))
+router.get('/', resolveTeam, (req, res) => {
+  res.json((req.team.channels ?? DEFAULT_CHANNELS).map((name) => ({ name, team: req.team.id })))
 })
 
 // GET /api/teams/:id/channels/:name/messages — read messages (via IRC gateway)
-router.get('/:name/messages', (req, res) => {
-  const team = requireTeam(req, res)
-  if (!team) return
+router.get('/:name/messages', resolveTeam, (req, res) => {
   const limit = Number(req.query.limit) || 100
   const since = req.query.since || undefined
   const channel = `#${req.params.name}`
-  res.json(readMessages(team.id, channel, { limit, since }))
+  res.json(readMessages(req.team.id, channel, { limit, since }))
 })
 
 // POST /api/teams/:id/channels/:name/messages — send message (via IRC gateway)
-router.post('/:name/messages', (req, res) => {
-  const team = requireTeam(req, res)
-  if (!team) return
+router.post('/:name/messages', resolveTeam, (req, res) => {
   const { text } = req.body ?? {}
   if (!text || typeof text !== 'string') {
     return res.status(400).json({ error: 'text is required', code: 'MISSING_TEXT' })
   }
   const channel = `#${req.params.name}`
-  const gw = getGateway(team.id)
+  const gw = getGateway(req.team.id)
   if (!gw) {
     return res.status(503).json({ error: 'IRC gateway not connected for this team', code: 'GATEWAY_NOT_READY' })
   }
