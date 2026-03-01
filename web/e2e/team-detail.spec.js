@@ -114,11 +114,11 @@ test.describe('Team Detail — authenticated', () => {
 
     // Click to expand
     await page.getByText('agent-dev').click()
-    await expect(page.getByText('▼ console open')).toBeVisible()
+    await expect(page.getByText('▼ console + activity')).toBeVisible()
 
     // Click again to collapse
-    await page.getByText('agent-dev').click()
-    await expect(page.getByText('▼ console open')).not.toBeVisible()
+    await page.getByText('agent-dev').first().click()
+    await expect(page.getByText('▼ console + activity')).not.toBeVisible()
     await expect(page.getByText('▶ click for console').first()).toBeVisible()
   })
 
@@ -132,7 +132,7 @@ test.describe('Team Detail — authenticated', () => {
     await gotoTeamDetail(page)
 
     // hostPort present → shows exposed port
-    await expect(page.getByText('16667')).toBeVisible()
+    await expect(page.getByText('16667', { exact: true })).toBeVisible()
     // Standard channels listed as copy buttons
     for (const ch of ['#main', '#tasks', '#code', '#testing', '#merges']) {
       await expect(page.getByRole('button', { name: ch })).toBeVisible()
@@ -143,8 +143,8 @@ test.describe('Team Detail — authenticated', () => {
     const teamInternalErgo = { ...SAMPLE_TEAM, ergo: { port: 6667 } }
     await gotoTeamDetail(page, teamInternalErgo)
 
-    await expect(page.getByText('ergo-Alpha Squad')).toBeVisible()
-    await expect(page.getByText('6667')).toBeVisible()
+    await expect(page.getByText('ergo-Alpha Squad', { exact: true })).toBeVisible()
+    await expect(page.getByText('6667', { exact: true })).toBeVisible()
     await expect(page.getByText(/internal only/i)).toBeVisible()
   })
 
@@ -156,23 +156,26 @@ test.describe('Team Detail — authenticated', () => {
     await expect(stopBtn).toBeEnabled()
   })
 
-  test('Stop Team button is disabled for a stopped team', async ({ page }) => {
+  test('Start Team button is visible for a stopped team', async ({ page }) => {
     await gotoTeamDetail(page, { ...SAMPLE_TEAM, status: 'stopped' })
 
-    await expect(page.getByRole('button', { name: /Stop Team/i })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Start Team/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Start Team/i })).toBeEnabled()
   })
 
-  test('Stop Team calls DELETE /api/teams/:id and redirects to dashboard', async ({ page }) => {
+  test('Stop Team calls POST /api/teams/:id/stop and updates button to Start Team', async ({ page }) => {
     await authenticate(page)
 
-    let deleteCalled = false
-    // Single handler that dispatches on method
-    await page.route(`/api/teams/${TEAM_ID}`, route => {
-      if (route.request().method() === 'DELETE') {
-        deleteCalled = true
+    let stopCalled = false
+    await page.route(`/api/teams/${TEAM_ID}`, route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE_TEAM) })
+    )
+    await page.route(`/api/teams/${TEAM_ID}/stop`, route => {
+      if (route.request().method() === 'POST') {
+        stopCalled = true
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
       }
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE_TEAM) })
+      return route.continue()
     })
     await page.route('/api/auth/ws-token', route =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ token: 'test' }) })
@@ -185,9 +188,9 @@ test.describe('Team Detail — authenticated', () => {
     page.once('dialog', dialog => dialog.accept())
     await page.getByRole('button', { name: /Stop Team/i }).click()
 
-    await page.waitForURL('**/dashboard')
-    await expect(page).toHaveURL(/\/dashboard/)
-    expect(deleteCalled).toBe(true)
+    // After stopping, the button should switch to "Start Team"
+    await expect(page.getByRole('button', { name: /Start Team/i })).toBeVisible()
+    expect(stopCalled).toBe(true)
   })
 
   test('shows error state with back link when API returns 500', async ({ page }) => {
