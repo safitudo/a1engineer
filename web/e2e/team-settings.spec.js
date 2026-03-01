@@ -8,8 +8,8 @@
  *   4. Channels section — saves parsed channel array via PATCH
  *   5. Channels section — client-side validation (empty, max 20)
  *   6. Agents section — remove agent sends DELETE
- *   7. Danger Zone — Stop Team button disabled when stopped
- *   8. Danger Zone — sends DELETE and redirects to /dashboard
+ *   7. Danger Zone — shows Start Team button when stopped
+ *   8. Danger Zone — Delete Team sends DELETE and redirects to /dashboard
  */
 import { test, expect } from '@playwright/test'
 
@@ -75,7 +75,7 @@ test.describe('Team Settings — General section', () => {
   test('renders team name in input', async ({ page }) => {
     await gotoSettings(page)
 
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
+    await expect(page.getByText('Settings')).toBeVisible()
     const nameInput = page.getByPlaceholder('e.g. alpha-squad')
     await expect(nameInput).toBeVisible()
     await expect(nameInput).toHaveValue('alpha-squad')
@@ -264,13 +264,13 @@ test.describe('Team Settings — Danger Zone', () => {
     await expect(stopBtn).toBeEnabled()
   })
 
-  test('Stop Team button is disabled when team is stopped', async ({ page }) => {
+  test('shows Start Team button when team is stopped', async ({ page }) => {
     await gotoSettings(page, { ...SAMPLE_TEAM, status: 'stopped' })
 
-    await expect(page.getByRole('button', { name: 'Stop Team' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Start Team' })).toBeVisible()
   })
 
-  test('Stop Team sends DELETE /api/teams/:id and redirects to /dashboard', async ({ page }) => {
+  test('Delete Team sends DELETE /api/teams/:id and redirects to /dashboard', async ({ page }) => {
     await gotoSettings(page)
 
     await page.route(`/api/teams/${TEAM_ID}`, route => {
@@ -286,18 +286,18 @@ test.describe('Team Settings — Danger Zone', () => {
     })
 
     page.on('dialog', dialog => dialog.accept())
-    await page.getByRole('button', { name: 'Stop Team' }).click()
+    await page.getByRole('button', { name: 'Delete Team' }).click()
 
     await page.waitForURL('**/dashboard')
     await expect(page).toHaveURL(/\/dashboard$/)
   })
 
-  test('shows Stopping… while DELETE request is in flight', async ({ page }) => {
+  test('shows Stopping… while Stop request is in flight', async ({ page }) => {
     await gotoSettings(page)
 
-    // Never fulfill the DELETE — keeps button in Stopping… state
-    await page.route(`/api/teams/${TEAM_ID}`, route => {
-      if (route.request().method() !== 'DELETE') route.continue()
+    // Never fulfill the POST /stop — keeps button in Stopping… state
+    await page.route(`/api/teams/${TEAM_ID}/stop`, () => {
+      // Never fulfill — keeps Stopping… visible
     })
 
     page.on('dialog', dialog => dialog.accept())
