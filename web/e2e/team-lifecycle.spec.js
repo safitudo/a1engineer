@@ -164,7 +164,7 @@ test.describe.serial('Team lifecycle', () => {
     await expect(page.getByText('agent-qa')).toBeVisible()
   })
 
-  test('stop team redirects back to dashboard', async ({ page }) => {
+  test('stop team updates button to Start Team', async ({ page }) => {
     const team = {
       id: 'stop-team-1',
       name: 'stop-test',
@@ -175,24 +175,16 @@ test.describe.serial('Team lifecycle', () => {
     }
 
     await authenticate(page)
-    await page.route('/api/teams/stop-team-1', async route => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(team),
-        })
-      } else if (route.request().method() === 'DELETE') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ ok: true }),
-        })
+    await page.route('/api/teams/stop-team-1', route =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(team) })
+    )
+    await page.route('/api/teams/stop-team-1/stop', route => {
+      if (route.request().method() === 'POST') {
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+      } else {
+        route.continue()
       }
     })
-    await page.route('/api/teams', route =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) })
-    )
 
     await page.goto('/dashboard/teams/stop-team-1')
     await page.waitForLoadState('networkidle')
@@ -203,12 +195,11 @@ test.describe.serial('Team lifecycle', () => {
 
     await page.getByRole('button', { name: 'Stop Team' }).click()
 
-    // Should redirect to dashboard
-    await page.waitForURL('**/dashboard')
-    await expect(page).toHaveURL(/\/dashboard$/)
+    // Button switches to Start Team after stopping (no redirect)
+    await expect(page.getByRole('button', { name: 'Start Team' })).toBeVisible()
   })
 
-  test('Stop Team button is disabled when team is already stopped', async ({ page }) => {
+  test('Start Team button is shown when team is already stopped', async ({ page }) => {
     const team = {
       id: 'stopped-team-1',
       name: 'stopped-test',
@@ -226,7 +217,7 @@ test.describe.serial('Team lifecycle', () => {
     await page.goto('/dashboard/teams/stopped-team-1')
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByRole('button', { name: 'Stop Team' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Start Team' })).toBeVisible()
   })
 
   test('dismissing stop confirm dialog keeps team detail open', async ({ page }) => {
@@ -318,7 +309,7 @@ test.describe.serial('Team lifecycle', () => {
     await expect(page.getByRole('heading', { name: 'Danger Zone' })).toBeVisible()
 
     page.on('dialog', dialog => dialog.accept())
-    await page.getByRole('button', { name: 'Stop Team' }).click()
+    await page.getByRole('button', { name: 'Delete Team' }).click()
 
     await page.waitForURL('**/dashboard')
     await expect(page).toHaveURL(/\/dashboard$/)
