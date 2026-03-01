@@ -1,6 +1,7 @@
 import IRC from 'irc-framework'
 import { EventEmitter } from 'events'
 import { DEFAULT_CHANNELS } from '../store/teams.js'
+import { listTeamChannels } from '../store/channels.js'
 
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30000
@@ -14,7 +15,7 @@ const RECONNECT_FACTOR = 2
  * exponential backoff.
  *
  * Events:
- *   message  { teamId, teamName, channel, nick, text, time }
+ *   message  { teamId, teamName, channel, channelId, nick, text, time }
  *   connect  { teamId, teamName }
  *   disconnect { teamId, teamName }
  */
@@ -62,10 +63,14 @@ export class IrcGateway extends EventEmitter {
     })
 
     this.#client.on('message', (event) => {
+      const channelName = event.target
+      const channels = listTeamChannels(this.#teamId)
+      const ch = channels.find(c => c.name === channelName)
       this.emit('message', {
         teamId: this.#teamId,
         teamName: this.#teamName,
-        channel: event.target,
+        channel: channelName,
+        channelId: ch?.id ?? null,
         nick: event.nick,
         text: event.message,
         time: new Date().toISOString(),
@@ -116,6 +121,28 @@ export class IrcGateway extends EventEmitter {
     for (const ch of toJoin) {
       this.#client.join(ch)
     }
+  }
+
+  /**
+   * Join a single channel at runtime. No-op if already in the channel list.
+   * Issues the IRC JOIN command immediately if connected.
+   */
+  joinChannel(name) {
+    if (!this.#channels.includes(name)) {
+      this.#channels = [...this.#channels, name]
+    }
+    if (!this.#client || this.#destroyed) return
+    this.#client.join(name)
+  }
+
+  /**
+   * Part a single channel at runtime. Removes it from the channel list and
+   * issues the IRC PART command immediately if connected.
+   */
+  partChannel(name) {
+    this.#channels = this.#channels.filter(ch => ch !== name)
+    if (!this.#client || this.#destroyed) return
+    this.#client.part(name)
   }
 
   destroy() {

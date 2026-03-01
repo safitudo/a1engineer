@@ -46,6 +46,30 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_templates_tenant_id ON templates(tenant_id);
     `,
   },
+  {
+    name: '004_create_channels',
+    sql: `
+      CREATE TABLE IF NOT EXISTS channels (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        type       TEXT NOT NULL DEFAULT 'irc',
+        config     TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    name: '005_create_team_channels',
+    sql: `
+      CREATE TABLE IF NOT EXISTS team_channels (
+        team_id    TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        PRIMARY KEY (team_id, channel_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_team_channels_team_id    ON team_channels(team_id);
+      CREATE INDEX IF NOT EXISTS idx_team_channels_channel_id ON team_channels(channel_id);
+    `,
+  },
 ]
 
 function runMigrations(db) {

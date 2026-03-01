@@ -15,28 +15,24 @@
  */
 
 import { getTeam } from '../store/teams.js'
+import { listTeamChannels } from '../store/channels.js'
 
 const TAG_RE = /^\[([A-Z]+)\]\s*(.*)/
 
-// Ring buffer per (teamId, channel), capped at MAX_MESSAGES entries
+// Ring buffer per channelId (UUID), capped at MAX_MESSAGES entries
 const MAX_MESSAGES = 500
-const buffers = new Map() // key: `${teamId}:${channel}`
+const buffers = new Map() // key: channelId (UUID)
 
 // WebSocket broadcast callbacks registered by the WS layer
 const wsBroadcasters = new Set()
 
-function bufferKey(teamId, channel) {
-  return `${teamId}:${channel}`
+function getBuffer(channelId) {
+  if (!buffers.has(channelId)) buffers.set(channelId, [])
+  return buffers.get(channelId)
 }
 
-function getBuffer(teamId, channel) {
-  const key = bufferKey(teamId, channel)
-  if (!buffers.has(key)) buffers.set(key, [])
-  return buffers.get(key)
-}
-
-function appendToBuffer(teamId, channel, entry) {
-  const buf = getBuffer(teamId, channel)
+function appendToBuffer(channelId, entry) {
+  const buf = getBuffer(channelId)
   buf.push(entry)
   if (buf.length > MAX_MESSAGES) buf.shift()
 }
@@ -55,10 +51,10 @@ function parseTag(text) {
  * Route a message event (emitted by IrcGateway) through the buffer and
  * WebSocket broadcast pipeline.
  *
- * @param {object} event - { teamId, teamName, channel, nick, text, time }
+ * @param {object} event - { teamId, teamName, channel, channelId, nick, text, time }
  */
 export function routeMessage(event) {
-  const { teamId, channel, text, time } = event
+  const { channelId, text } = event
 
   const structured = parseTag(text)
   const entry = {
@@ -67,7 +63,7 @@ export function routeMessage(event) {
     tagBody: structured?.body ?? null,
   }
 
-  appendToBuffer(teamId, channel, entry)
+  appendToBuffer(channelId, entry)
 
   for (const broadcast of wsBroadcasters) {
     try {
@@ -89,17 +85,16 @@ export function registerBroadcaster(fn) {
 }
 
 /**
- * Read buffered messages for a team's channel.
+ * Read buffered messages for a channel by its UUID.
  *
- * @param {string} teamId
- * @param {string} channel - e.g. '#main'
+ * @param {string} channelId - channel UUID
  * @param {object} opts
  * @param {number} [opts.limit=100] - max messages to return
  * @param {string} [opts.since] - ISO timestamp; only return messages after this
  * @returns {object[]}
  */
-export function readMessages(teamId, channel, { limit = 100, since } = {}) {
-  let msgs = getBuffer(teamId, channel)
+export function readMessages(channelId, { limit = 100, since } = {}) {
+  let msgs = getBuffer(channelId)
   if (since) {
     msgs = msgs.filter((m) => m.time > since)
   }
@@ -118,8 +113,8 @@ export function listChannels(teamId) {
  * Clear all buffered messages for a team (call on team teardown).
  */
 export function clearTeamBuffers(teamId) {
-  const prefix = `${teamId}:`
-  for (const key of [...buffers.keys()]) {
-    if (key.startsWith(prefix)) buffers.delete(key)
+  const channels = listTeamChannels(teamId)
+  for (const ch of channels) {
+    buffers.delete(ch.id)
   }
 }

@@ -8,10 +8,25 @@ import agentsRouter from './agents.js'
 import channelsRouter from './channels.js'
 import authRouter from './auth.js'
 import templatesRouter from './templates.js'
+import { registerAdapter } from '../irc/registry.js'
+import { getGateway as getIrcGateway } from '../irc/gateway.js'
+import { findTeamsByChannelId } from '../store/channels.js'
 
 export function createApp() {
   const app = express()
   app.use(express.json())
+
+  registerAdapter('irc', {
+    getGateway(channelId) {
+      const [teamId] = findTeamsByChannelId(channelId)
+      return teamId ? getIrcGateway(teamId) : null
+    },
+    broadcast(channelId, channelName, msg) {
+      for (const teamId of findTeamsByChannelId(channelId)) {
+        getIrcGateway(teamId)?.say(channelName, msg)
+      }
+    },
+  })
 
   // GET /github-token/:teamId — fresh GitHub token for agent git operations
   app.get('/github-token/:teamId', requireAuth, async (req, res) => {

@@ -34,6 +34,20 @@ vi.mock('./ws.js', () => ({
   attachWebSocketServer: vi.fn(),
 }))
 
+// Mock channels store to provide fake channel IDs
+vi.mock('../store/channels.js', () => ({
+  createChannel: vi.fn().mockReturnValue({ channel: { id: 'ch-new', name: '#main' } }),
+  addTeamChannel: vi.fn(),
+  findTeamsByChannelId: vi.fn().mockReturnValue([]),
+  listTeamChannels: vi.fn().mockReturnValue([
+    { id: 'ch-main', name: '#main' },
+    { id: 'ch-tasks', name: '#tasks' },
+    { id: 'ch-code', name: '#code' },
+    { id: 'ch-testing', name: '#testing' },
+    { id: 'ch-merges', name: '#merges' },
+  ]),
+}))
+
 // Mock child_process.spawn to avoid real docker calls in logs tests
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal()

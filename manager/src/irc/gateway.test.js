@@ -1,6 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { IrcGateway } from './gateway.js'
 
+// ── Mock channels store (gateway imports listTeamChannels for channelId lookup) ──
+
+vi.mock('../store/channels.js', () => ({
+  listTeamChannels: vi.fn().mockReturnValue([
+    { id: 'ch-main', name: '#main' },
+    { id: 'ch-tasks', name: '#tasks' },
+  ]),
+}))
+
 // ── Mock irc-framework ───────────────────────────────────────────────────────
 
 const mockClient = {
@@ -41,6 +50,95 @@ function simulateConnect(gw) {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe('IrcGateway.joinChannel()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('adds the channel to the list when not already present', () => {
+    const gw = makeGateway({ channels: ['#main'] })
+    gw.joinChannel('#ops')
+    expect(gw.channels).toContain('#ops')
+  })
+
+  it('does not duplicate the channel if already in the list', () => {
+    const gw = makeGateway({ channels: ['#main'] })
+    gw.joinChannel('#main')
+    expect(gw.channels.filter(c => c === '#main')).toHaveLength(1)
+  })
+
+  it('does not call client.join when not yet connected', () => {
+    const gw = makeGateway({ channels: ['#main'] })
+    gw.joinChannel('#ops')
+    expect(mockClient.join).not.toHaveBeenCalled()
+  })
+
+  it('calls client.join when connected', () => {
+    const gw = makeGateway({ channels: ['#main'] })
+    simulateConnect(gw)
+    vi.clearAllMocks()
+
+    gw.joinChannel('#ops')
+    expect(mockClient.join).toHaveBeenCalledWith('#ops')
+  })
+
+  it('does not call client.join when destroyed', () => {
+    const gw = makeGateway({ channels: ['#main'] })
+    simulateConnect(gw)
+    gw.destroy()
+    vi.clearAllMocks()
+
+    gw.joinChannel('#ops')
+    expect(mockClient.join).not.toHaveBeenCalled()
+    expect(gw.channels).toContain('#ops')
+  })
+})
+
+describe('IrcGateway.partChannel()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('removes the channel from the list', () => {
+    const gw = makeGateway({ channels: ['#main', '#tasks'] })
+    gw.partChannel('#tasks')
+    expect(gw.channels).not.toContain('#tasks')
+    expect(gw.channels).toContain('#main')
+  })
+
+  it('is a no-op when the channel is not in the list', () => {
+    const gw = makeGateway({ channels: ['#main'] })
+    gw.partChannel('#unknown')
+    expect(gw.channels).toEqual(['#main'])
+  })
+
+  it('does not call client.part when not yet connected', () => {
+    const gw = makeGateway({ channels: ['#main', '#tasks'] })
+    gw.partChannel('#tasks')
+    expect(mockClient.part).not.toHaveBeenCalled()
+  })
+
+  it('calls client.part when connected', () => {
+    const gw = makeGateway({ channels: ['#main', '#tasks'] })
+    simulateConnect(gw)
+    vi.clearAllMocks()
+
+    gw.partChannel('#tasks')
+    expect(mockClient.part).toHaveBeenCalledWith('#tasks')
+  })
+
+  it('does not call client.part when destroyed', () => {
+    const gw = makeGateway({ channels: ['#main', '#tasks'] })
+    simulateConnect(gw)
+    gw.destroy()
+    vi.clearAllMocks()
+
+    gw.partChannel('#tasks')
+    expect(mockClient.part).not.toHaveBeenCalled()
+    expect(gw.channels).not.toContain('#tasks')
+  })
+})
 
 describe('IrcGateway.updateChannels()', () => {
   beforeEach(() => {

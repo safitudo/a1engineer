@@ -6,6 +6,7 @@ import { startTeam, stopTeam, rehydrateTeams } from '../orchestrator/compose.js'
 import { createGateway, destroyGateway, getGateway } from '../irc/gateway.js'
 import { broadcastTeamStatus } from './ws.js'
 import { routeMessage, clearTeamBuffers } from '../irc/router.js'
+import { createChannel, addTeamChannel } from '../store/channels.js'
 import { TEAMS_DIR } from '../constants.js'
 
 const router = Router()
@@ -49,6 +50,11 @@ router.post('/', async (req, res) => {
   }
 
   const team = teamStore.createTeam(config, { tenantId: req.tenantId })
+  const channelNames = team.channels ?? teamStore.DEFAULT_CHANNELS
+  for (const name of channelNames) {
+    const { channel } = createChannel({ name, type: 'irc' })
+    addTeamChannel(team.id, channel.id)
+  }
   try {
     await startTeam(team, { apiKey: config.auth?.apiKey })
     teamStore.updateTeam(team.id, { status: 'running' })
