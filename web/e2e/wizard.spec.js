@@ -216,10 +216,11 @@ test.describe('Create Team wizard — step 3 (API Key)', () => {
     await apiKeyInput.scrollIntoViewIfNeeded()
     await expect(apiKeyInput).toHaveAttribute('type', 'password')
 
-    // Toggle show/hide
-    await page.getByRole('button', { name: 'Show' }).click()
+    // Toggle show/hide — exact: true prevents matching the Next.js dev-mode
+    // "Hide static indicator" toast button (Playwright name match is substring by default)
+    await page.getByRole('button', { name: 'Show', exact: true }).click()
     await expect(apiKeyInput).toHaveAttribute('type', 'text')
-    await page.getByRole('button', { name: 'Hide' }).click()
+    await page.getByRole('button', { name: 'Hide', exact: true }).click()
     await expect(apiKeyInput).toHaveAttribute('type', 'password')
 
     // Validation: empty API key
