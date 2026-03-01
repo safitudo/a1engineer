@@ -39,9 +39,21 @@ jobs:
         run: npm run build
 
       # ── Playwright E2E tests ────────────────────────────────────────────────
+      - name: Start manager API
+        working-directory: manager
+        run: node src/index.js serve --port 8080 &
+
       - name: Install Playwright browsers
         working-directory: web
         run: npx playwright install --with-deps chromium
+
+      - name: Wait for manager API to be ready
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/api/templates && echo "Manager ready" && break
+            echo "Waiting for manager ($i/30)..."
+            sleep 1
+          done
 
       - name: Run Playwright E2E tests
         working-directory: web
