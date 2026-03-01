@@ -56,7 +56,7 @@ router.post('/', async (req, res) => {
     // Inject fresh GitHub tokens into containers (5s delay for containers to be ready)
     const tokenRefresh = req.app.get('tokenRefresh')
     if (tokenRefresh?.refreshNow) tokenRefresh.refreshNow()
-    broadcastTeamStatus(team.id, 'running', req.tenantId, { name: team.name })
+    broadcastTeamStatus(team.id, 'running', team.tenantId, { name: team.name })
     return res.status(201).json(teamStore.getTeam(team.id))
   } catch (err) {
     teamStore.deleteTeam(team.id)
@@ -220,7 +220,7 @@ router.post('/:id/stop', requireTeam, async (req, res) => {
     console.error('[api/teams] stopTeam failed:', err)
   }
   teamStore.updateTeam(req.params.id, { status: 'stopped' })
-  broadcastTeamStatus(req.params.id, 'stopped', req.tenantId)
+  broadcastTeamStatus(req.params.id, 'stopped', team.tenantId)
   res.json({ ok: true, status: 'stopped' })
 })
 
@@ -237,12 +237,12 @@ router.post('/:id/start', requireTeam, async (req, res) => {
     createGateway(teamStore.getTeam(req.params.id), { onMessage: routeMessage })
     const tokenRefresh = req.app.get('tokenRefresh')
     if (tokenRefresh?.refreshNow) tokenRefresh.refreshNow()
-    broadcastTeamStatus(req.params.id, 'running', req.tenantId)
+    broadcastTeamStatus(req.params.id, 'running', team.tenantId)
     res.json({ ok: true, status: 'running' })
   } catch (err) {
     console.error('[api/teams] startTeam failed:', err)
     teamStore.updateTeam(req.params.id, { status: 'error' })
-    broadcastTeamStatus(req.params.id, 'error', req.tenantId)
+    broadcastTeamStatus(req.params.id, 'error', team.tenantId)
     res.status(500).json({ error: 'failed to start team', code: 'COMPOSE_ERROR' })
   }
 })
@@ -258,7 +258,7 @@ router.delete('/:id', requireTeam, async (req, res) => {
   }
   clearTeamBuffers(req.params.id)
   teamStore.deleteTeam(req.params.id)
-  broadcastTeamStatus(req.params.id, 'deleted', req.tenantId)
+  broadcastTeamStatus(req.params.id, 'deleted', team.tenantId)
   res.status(204).end()
 })
 
