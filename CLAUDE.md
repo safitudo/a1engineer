@@ -104,7 +104,7 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 
 ---
 
-## Sprint Progress (2026-02-28)
+## Sprint Progress (2026-03-01)
 
 ### What's Been Built & Merged to Main
 
@@ -148,47 +148,38 @@ IRC is for real-time coordination; GitHub Issues is for persistent tracking.
 - **Custom Template CRUD Frontend** — PR #147
 - **E2E Test Expansion** — PRs #141, #142
 - **CI Workflow** — PR #149
-- **SQLite Phase 1-2 (teams.js)** — PR #150
-- **SQLite Phase 3 (tenants.js)** — PR #151
-- **SQLite Phase 4-5 (templates.js + cleanup)** — M1 complete
+- **M1 — SQLite Migration** (phases 1-5) — PRs #150, #151, #156, #159
+- **M2 — Decouple Communication Channels Phase 1** — PR #162
+- **M3 — Dynamic Agent Add/Remove** — PR #169
+- **M4 — Interactive Mode + Chuck Fix** (writeFifo, stall broadcasts) — PRs #170, #176, #177
+- **M5 — API Auth Hardening** (rate-limit, auth-gate, requireTeamScope) — PRs #186, #189, #215
+- **M6 — UI/Real-time Features waves 1–2** (AgentActions, AgentActivity, IrcMessageInput, IrcConnectionInfo, E2E) — PRs #193–#213
 
 ### Roadmap
 
-**M1 — Complete SQLite Migration — DONE**
-- Phase 4: templates.js — custom templates in SQLite, builtins from JSON (read-only Map, appropriate)
-- Phase 5: cleanup — stripped apiKey from findByApiKey/upsertTenant return values, verified zero dead Map imports
-- Deliverable: zero in-memory Maps for persistent state ✓ (builtinStore is read-only runtime cache, not persistent state)
+**M1 — Complete SQLite Migration** ✅ complete
+- Phases 1-5: teams.js, tenants.js, templates.js, cleanup — zero in-memory Maps for persistent state
 
-**M2 — Decouple Communication Channels**
-Goal: channels as first-class entities, not team-embedded arrays. IRC first, later Slack/Discord.
-- Channel store (SQLite table) with id, type=irc, config, independent of teams
-- GatewayRegistry abstraction: Manager -> GatewayRegistry -> [IrcAdapter, SlackAdapter, ...]
-- gateway.js: add joinChannel(name) / partChannel(name) for runtime channel mutation
-- router.js: re-key buffers from teamId:channel to channelId
-- Teams subscribe to channels (many-to-many); cross-team comms via shared gateway
+**M2 — Decouple Communication Channels** ✅ complete (Phase 1)
+- Channel store, GatewayRegistry abstraction, joinChannel/partChannel, buffer re-keying
 
-**M3 — Dynamic Agent Add/Remove**
-Goal: add/remove agents at runtime without recreating the team.
-- compose.js: per-agent docker compose up/down (not all-or-nothing startTeam/stopTeam)
-- team-compose.yml.ejs: git-init must run for newly added agents (currently one-shot)
-- agents.js API POST: fix git worktree initialization for new agents
-- agents.js API DELETE: rewrite compose file + flush team-meta.json on removal
+**M3 — Dynamic Agent Add/Remove** ✅ complete
+- Per-agent docker compose up/down, git worktree init for new agents, compose rewrite on removal
 
-**M4 — Auth + Interactive Mode + Chuck Fix**
-- API key auth cannot work with interactive mode — session OAuth tokens required for TUI; document tradeoffs
-- Text-mode (print-loop) agents don't show live updates — console.attach captures tmux but input doesn't reach print loop
-- Fix nudger.js: replace direct tmux injection with writeFifo() path for mode-aware delivery
+**M4 — Auth + Interactive Mode + Chuck Fix** ✅ complete
+- writeFifo() path for mode-aware nudge delivery, stall detection broadcasts, chuck CLI token fix
+
+**M5 — API Auth Hardening** ✅ complete
+- Rate-limit /login and /signup, auth-gate /github-token and /heartbeat, requireTeamScope middleware
+
+**M6 — UI/Real-time Features** 🔄 in progress
+- Wave 1-2: AgentActions, AgentActivity, IrcMessageInput, IrcConnectionInfo, LogsViewer, E2E tests — merged
+- Wave 3: team start/stop controls (#216, Fixes #210), dashboard real-time WS (#217, Fixes #211) — PRs open
 
 ### Current Assignments
 | Agent | Task | Status |
 |-------|------|--------|
 | arch | Architecture, roadmap, PR review | Active |
-| dev-3 | CLAUDE.md roadmap update | In progress |
-| dev-4 | M1 Phase 4 — templates.js SQLite | In progress |
-| critic-7 | PR review | Monitoring |
+| dev-5 | CLAUDE.md refresh (#223) | In progress |
+| critic-7 | PR review (wave 3 PRs #216, #217) | Monitoring |
 | qa-6 | Testing | Monitoring |
-
-### Known Issues
-- nudger.js auto-nudge broken for print-loop (API key) agents — uses direct tmux, bypasses sidecar FIFO
-- agents.js DELETE does not rewrite compose or persist meta — partial implementation
-- broadcastAgentStatus() in ws.js is dead code — never called
