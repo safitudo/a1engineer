@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16
@@ -50,6 +48,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - backend
+      - ergo
     networks:
       - a1-net
 
