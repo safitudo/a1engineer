@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: agentfarm
+      POSTGRES_USER: agentfarm
+      POSTGRES_PASSWORD: localdev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - a1-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentfarm -d agentfarm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgres://agentfarm:localdev@postgres:5432/agentfarm
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-prod}
+      ACCOUNT_MANAGER_URL: http://account-manager:4100
+      NODE_ENV: development
+    volumes:
+      - ./backend/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - a1-net
+
+  account-manager:
+    build: ./account-manager
+    ports:
+      - "4100:4100"
+    environment:
+      BACKEND_URL: http://backend:4000
+      ERGO_HOST: ergo
+      ERGO_PORT: 6667
+      NODE_ENV: development
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - backend
+    networks:
+      - a1-net
+
+  ergo:
+    image: ghcr.io/ergochat/ergo:stable
+    ports:
+      - "6667:6667"
+    volumes:
+      - ./templates/ergo/ircd.yaml:/ircd/ircd.yaml
+      - ergodata:/ircd/db
+    networks:
+      - a1-net
+
+volumes:
+  pg-data:
+  ergodata:
+
+networks:
+  a1-net:
+    driver: bridge
