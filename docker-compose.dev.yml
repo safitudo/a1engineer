@@ -26,6 +26,7 @@ services:
       DATABASE_URL: postgres://agentfarm:localdev@postgres:5432/agentfarm
       JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-prod}
       ACCOUNT_MANAGER_URL: http://account-manager:4100
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local-dev-internal-token}
       NODE_ENV: development
     volumes:
       - ./backend/src:/app/src
@@ -43,6 +44,7 @@ services:
       BACKEND_URL: http://backend:4000
       ERGO_HOST: ergo
       ERGO_PORT: 6667
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local-dev-internal-token}
       NODE_ENV: development
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
