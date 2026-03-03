@@ -23,9 +23,9 @@ describe('upsertTenant', () => {
     expect(t1.id).not.toBe(t2.id)
   })
 
-  it('id is a 16-char hex string', () => {
-    const t = upsertTenant('hex-test-key')
-    expect(t.id).toMatch(/^[0-9a-f]{16}$/)
+  it('id is a UUID', () => {
+    const t = upsertTenant('uuid-test-key')
+    expect(t.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
   })
 })
 
