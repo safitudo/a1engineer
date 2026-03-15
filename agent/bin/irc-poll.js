@@ -1,24 +1,9 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { config } from '../lib/config.js'
 import { connect, disconnect } from '../lib/connection.js'
+import { loadHistory, saveHistory } from '../lib/history.js'
 
-const HISTORY_FILE = join(homedir(), '.chathistory')
 const POLL_TIMEOUT = 1500 // ms — must exit fast for PostToolUse hook
-
-async function loadHistory() {
-  try {
-    return JSON.parse(await readFile(HISTORY_FILE, 'utf8'))
-  } catch {
-    return {}
-  }
-}
-
-async function saveHistory(history) {
-  await writeFile(HISTORY_FILE, JSON.stringify(history), 'utf8')
-}
 
 async function poll() {
   const client = await connect(config, { timeout: POLL_TIMEOUT })
