@@ -30,10 +30,12 @@ let _capturedOnMessage = null;
 
 await mock.module('../orchestrator/compose.js', {
   namedExports: {
-    startTeam:      mock.fn(async () => {}),
-    stopTeam:       mock.fn(async () => {}),
-    renderCompose:  mock.fn(async () => 'version: "3"'),
-    rehydrateTeams: mock.fn(async () => []),
+    startTeam:         mock.fn(async () => {}),
+    stopTeam:          mock.fn(async () => {}),
+    renderCompose:     mock.fn(async () => 'version: "3"'),
+    rehydrateTeams:    mock.fn(async () => []),
+    rewriteCompose:    mock.fn(async () => {}),
+    startAgentService: mock.fn(async () => {}),
   },
 });
 
@@ -54,6 +56,8 @@ const { createApp }             = await import('../api/index.js');
 const { attachWebSocketServer } = await import('../api/ws.js');
 const { listTeams, deleteTeam } = await import('../store/teams.js');
 const { clearTeamBuffers }      = await import('../irc/router.js');
+const { initDb, closeDb }       = await import('../store/db.js');
+const { listTeamChannels }      = await import('../store/channels.js');
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────
 
@@ -95,7 +99,8 @@ const del  = (port, path)       => rawRequest(port, 'DELETE', path);
 
 // ── Server lifecycle ──────────────────────────────────────────────────────
 
-function startServer() {
+async function startServer() {
+  initDb(':memory:');
   return new Promise((resolve) => {
     const app    = createApp();
     const server = http.createServer(app);
@@ -141,6 +146,23 @@ function wsSubscribe(port, teamId) {
   });
 }
 
+// ── IRC event injection helper ────────────────────────────────────────────
+// Mirrors what the real IrcGateway does: resolves channelId from the DB
+// before passing the event to the routeMessage pipeline.
+
+function injectMessage(teamId, channel, nick, text) {
+  const channels = listTeamChannels(teamId);
+  const ch = channels.find((c) => c.name === channel);
+  _capturedOnMessage({
+    teamId,
+    channel,
+    channelId: ch?.id ?? null,
+    nick,
+    text,
+    time: new Date().toISOString(),
+  });
+}
+
 // ── Fixture ───────────────────────────────────────────────────────────────
 
 const VALID_TEAM = {
@@ -165,6 +187,7 @@ describe('Standalone agent — IRC routing pipeline', () => {
       deleteTeam(t.id);
     }
     await stopServer(server);
+    closeDb();
   });
 
   afterEach(() => {
@@ -199,13 +222,7 @@ describe('Standalone agent — IRC routing pipeline', () => {
     const { id: teamId } = createRes.body;
 
     // Inject a synthetic IRC event through the real routeMessage pipeline
-    _capturedOnMessage({
-      teamId,
-      channel: '#main',
-      nick: 'dev-bot',
-      text: 'hello from the pipeline',
-      time: new Date().toISOString(),
-    });
+    injectMessage(teamId, '#main', 'dev-bot', 'hello from the pipeline');
 
     // channels.js prepends '#' to req.params.name, so route without '#'
     const msgRes = await get(port, `/api/teams/${teamId}/channels/main/messages`);
@@ -230,13 +247,7 @@ describe('Standalone agent — IRC routing pipeline', () => {
       try { received.push(JSON.parse(raw.toString())); } catch { /* ignore non-JSON */ }
     });
 
-    _capturedOnMessage({
-      teamId,
-      channel: '#main',
-      nick: 'dev-bot',
-      text: '[ACK] pipeline test',
-      time: new Date().toISOString(),
-    });
+    injectMessage(teamId, '#main', 'dev-bot', '[ACK] pipeline test');
 
     // Allow the broadcast to propagate
     await new Promise((r) => setTimeout(r, 100));
@@ -259,20 +270,8 @@ describe('Standalone agent — IRC routing pipeline', () => {
     assert.equal(createRes.status, 201);
     const { id: teamId } = createRes.body;
 
-    _capturedOnMessage({
-      teamId,
-      channel: '#tasks',
-      nick: 'lead',
-      text: '[DONE] task completed',
-      time: new Date().toISOString(),
-    });
-    _capturedOnMessage({
-      teamId,
-      channel: '#tasks',
-      nick: 'dev',
-      text: 'just chatting',
-      time: new Date().toISOString(),
-    });
+    injectMessage(teamId, '#tasks', 'lead', '[DONE] task completed');
+    injectMessage(teamId, '#tasks', 'dev',  'just chatting');
 
     const msgRes = await get(port, `/api/teams/${teamId}/channels/tasks/messages`);
     assert.equal(msgRes.status, 200);

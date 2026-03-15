@@ -21,10 +21,12 @@ import { WebSocket } from 'ws';
 
 await mock.module('../orchestrator/compose.js', {
   namedExports: {
-    startTeam:       mock.fn(async () => {}),
-    stopTeam:        mock.fn(async () => {}),
-    renderCompose:   mock.fn(async () => 'version: "3"'),
-    rehydrateTeams:  mock.fn(async () => {}),
+    startTeam:         mock.fn(async () => {}),
+    stopTeam:          mock.fn(async () => {}),
+    renderCompose:     mock.fn(async () => 'version: "3"'),
+    rehydrateTeams:    mock.fn(async () => {}),
+    rewriteCompose:    mock.fn(async () => {}),
+    startAgentService: mock.fn(async () => {}),
   },
 });
 
@@ -53,6 +55,7 @@ await mock.module('../irc/router.js', {
 const { createApp }                         = await import('../api/index.js');
 const { attachWebSocketServer }             = await import('../api/ws.js');
 const { createTeam, listTeams, deleteTeam } = await import('../store/teams.js');
+const { initDb, closeDb }                   = await import('../store/db.js');
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────
 
@@ -91,8 +94,8 @@ function rawRequest(port, method, path, body, headers = {}) {
 const get  = (port, path)        => rawRequest(port, 'GET',    path);
 const post = (port, path, body)  => rawRequest(port, 'POST',   path, body);
 
-// Heartbeat endpoint is auth-exempt — use a separate no-auth helper.
-function postHeartbeat(port, teamId, agentId) {
+// Heartbeat endpoint uses the team's internalToken (not the global API key).
+function postHeartbeat(port, teamId, agentId, internalToken) {
   return new Promise((resolve, reject) => {
     const req = http.request(
       {
@@ -100,7 +103,10 @@ function postHeartbeat(port, teamId, agentId) {
         port,
         path: `/heartbeat/${teamId}/${agentId}`,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(internalToken ? { Authorization: `Bearer ${internalToken}` } : {}),
+        },
       },
       (res) => {
         let data = '';
@@ -119,7 +125,8 @@ function postHeartbeat(port, teamId, agentId) {
 
 // ── Server lifecycle ──────────────────────────────────────────────────────
 
-function startServer() {
+async function startServer() {
+  initDb(':memory:');
   return new Promise((resolve) => {
     const app    = createApp();
     const server = http.createServer(app);
@@ -187,6 +194,7 @@ describe('Agent harness — lifecycle', () => {
     // Drain teams and shut down
     for (const t of listTeams()) deleteTeam(t.id);
     await stopServer(server);
+    closeDb();
   });
 
   afterEach(() => {
@@ -217,15 +225,15 @@ describe('Agent harness — lifecycle', () => {
     const createRes = await post(port, '/api/teams', VALID_TEAM);
     assert.equal(createRes.status, 201);
 
-    const { id: teamId, agents } = createRes.body;
+    const { id: teamId, agents, internalToken } = createRes.body;
     const agentId = agents[0].id;
 
     // Before heartbeat
     const before = await get(port, `/api/teams/${teamId}`);
     assert.equal(before.body.agents[0].last_heartbeat, null);
 
-    // Post heartbeat (no auth required)
-    const hbRes = await postHeartbeat(port, teamId, agentId);
+    // Post heartbeat using the team's internalToken
+    const hbRes = await postHeartbeat(port, teamId, agentId, internalToken);
     assert.equal(hbRes.status, 200, `heartbeat POST failed: ${JSON.stringify(hbRes.body)}`);
 
     // After heartbeat — last_heartbeat must be a valid ISO timestamp
@@ -242,7 +250,7 @@ describe('Agent harness — lifecycle', () => {
     const createRes = await post(port, '/api/teams', VALID_TEAM);
     assert.equal(createRes.status, 201);
 
-    const { id: teamId, agents } = createRes.body;
+    const { id: teamId, agents, internalToken } = createRes.body;
     const agentId = agents[0].id;
 
     // Connect WS and subscribe to this team's feed
@@ -255,7 +263,7 @@ describe('Agent harness — lifecycle', () => {
     });
 
     // Fire heartbeat — simulates an agent phoning home
-    const hbRes = await postHeartbeat(port, teamId, agentId);
+    const hbRes = await postHeartbeat(port, teamId, agentId, internalToken);
     assert.equal(hbRes.status, 200, `heartbeat POST failed: ${JSON.stringify(hbRes.body)}`);
 
     // Wait for broadcast to reach the WS client
