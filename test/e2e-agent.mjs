@@ -6,8 +6,12 @@
  * waits for the agent to open a PR in safitudo/a1-test-repo, then tears down.
  *
  * Credential loading (layered — no single env var required):
- *   ANTHROPIC_API_KEY  — checked in process.env first; falls back to ROOT/.env;
- *                        graceful skip (exit 0) if neither found.
+ *   SESSION_TOKEN      — Claude Max session token (env or ROOT/.env). Takes
+ *                        priority: sets testapp.json auth.mode to "session".
+ *   ANTHROPIC_API_KEY  — Claude API key fallback (env or ROOT/.env); uses
+ *                        testapp.json auth.mode "api-key" (the default).
+ *   Graceful skip      — exit 0 if NEITHER SESSION_TOKEN nor ANTHROPIC_API_KEY
+ *                        is found. CI injects via env var; local devs use .env.
  *   GitHub token       — after team creation, read from team dir's github_token.txt
  *                        (written by Manager when it resolves GitHub App creds from
  *                        testapp.json). Falls back to GITHUB_TOKEN env / ROOT/.env.
@@ -15,7 +19,7 @@
  *                        privateKeyPath). Manager resolves these automatically.
  *
  * Prerequisites (skipped gracefully if absent):
- *   ANTHROPIC_API_KEY   — Claude API key (env or ROOT/.env)
+ *   SESSION_TOKEN or ANTHROPIC_API_KEY — Claude auth (env or ROOT/.env)
  *   Docker daemon       — running and accessible
  *
  * Exit codes:
@@ -85,10 +89,13 @@ function parseDotenv(filePath) {
 
 const rootEnv = parseDotenv(join(ROOT, '.env'))
 
+// Auth: SESSION_TOKEN takes priority (Claude Max / local dev).
+// Fallback: ANTHROPIC_API_KEY (standard API key / CI).
+const SESSION_TOKEN     = process.env.SESSION_TOKEN     || rootEnv.SESSION_TOKEN     || ''
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || rootEnv.ANTHROPIC_API_KEY || ''
 
-if (!ANTHROPIC_API_KEY) {
-  warn('ANTHROPIC_API_KEY not set (checked process.env and ROOT/.env) — skipping Level B e2e test')
+if (!SESSION_TOKEN && !ANTHROPIC_API_KEY) {
+  warn('Neither SESSION_TOKEN nor ANTHROPIC_API_KEY set (checked process.env and ROOT/.env) — skipping Level B e2e test')
   process.exit(0)
 }
 
@@ -117,6 +124,17 @@ if (!existsSync(configPath)) {
 // Use the full config — Manager resolves GitHub App creds from appId /
 // installationId / privateKeyPath and writes github_token.txt to the team dir.
 const teamConfig = JSON.parse(readFileSync(configPath, 'utf8'))
+
+// Override auth mode based on available credentials.
+// SESSION_TOKEN wins (Claude Max session, Stan's local machine path).
+// ANTHROPIC_API_KEY keeps the testapp.json default of "api-key".
+if (SESSION_TOKEN) {
+  teamConfig.auth ??= {}
+  teamConfig.auth.mode = 'session'
+  info('Auth mode: session (SESSION_TOKEN present)')
+} else {
+  info('Auth mode: api-key (ANTHROPIC_API_KEY present)')
+}
 
 const TIMESTAMP   = Date.now()
 const TASK_FILE   = `test-e2e-${TIMESTAMP}.txt`
@@ -289,11 +307,10 @@ async function main() {
   managerPort = await findFreePort()
   info(`Starting Manager on port ${managerPort}…`)
 
-  const managerEnv = {
-    ...process.env,
-    ANTHROPIC_API_KEY,
-  }
-  if (githubToken) managerEnv.GITHUB_TOKEN = githubToken
+  const managerEnv = { ...process.env }
+  if (ANTHROPIC_API_KEY) managerEnv.ANTHROPIC_API_KEY = ANTHROPIC_API_KEY
+  if (SESSION_TOKEN)     managerEnv.SESSION_TOKEN     = SESSION_TOKEN
+  if (githubToken)       managerEnv.GITHUB_TOKEN      = githubToken
 
   managerProc = spawn(
     'node',
@@ -313,7 +330,7 @@ async function main() {
   // ── Step 2: Create team ──────────────────────────────────────────────────
   console.log()
   console.log(`${C}═══ Step 2: Create team ═══${RS}`)
-  info(`Creating team from ${configArg}…`)
+  info(`Creating team from ${configArg} (auth.mode: ${teamConfig.auth?.mode ?? 'api-key'})…`)
 
   const createRes = await managerApi('POST', '/api/teams', teamConfig)
   if (createRes.status !== 201) {

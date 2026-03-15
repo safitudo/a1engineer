@@ -67,15 +67,20 @@ node test/e2e-agent.mjs [configs/testapp.json]
 The script uses a layered credential resolution strategy so it works in both
 local dev (`.env` file) and CI (environment variables) without code changes:
 
-1. **`ANTHROPIC_API_KEY`** — checked in `process.env` first; if absent, loaded
-   from `ROOT/.env` (dotenv-style, parsed manually). If neither is present the
-   test exits 0 with a graceful skip.
-2. **GitHub token** — after team creation, read from
+1. **`SESSION_TOKEN`** *(priority)* — Claude Max session token. Checked in
+   `process.env` first; if absent, loaded from `ROOT/.env`. When present,
+   overrides `testapp.json` `auth.mode` to `"session"`. This is the local
+   developer path (Stan's machine).
+2. **`ANTHROPIC_API_KEY`** *(fallback)* — Standard Claude API key. Checked in
+   `process.env` first; if absent, loaded from `ROOT/.env`. Keeps
+   `testapp.json` `auth.mode` as `"api-key"` (the default). This is the CI
+   path. The test exits 0 with a graceful skip if **neither** token is found.
+3. **GitHub token** — after team creation, read from
    `/tmp/a1-teams/$TEAM_ID/github_token.txt` (written by the Manager when it
    resolves the GitHub App credentials from `testapp.json`). Falls back to
-   `GITHUB_TOKEN` env var. If neither is available after team creation the
-   GitHub polling step fails with a descriptive error.
-3. **GitHub App creds** — provided via `testapp.json` (`appId`, `installationId`,
+   `GITHUB_TOKEN` env var / `ROOT/.env`. If neither is available the GitHub
+   polling step fails with a descriptive error.
+4. **GitHub App creds** — provided via `testapp.json` (`appId`, `installationId`,
    `privateKeyPath`). The Manager resolves these automatically.
 
 ### Prerequisites
@@ -84,7 +89,7 @@ The script exits 0 (graceful skip) if any prerequisite is absent:
 
 | Prerequisite | Purpose |
 |--------------|---------|
-| `ANTHROPIC_API_KEY` (env or `ROOT/.env`) | Agent runtime (Claude API) |
+| `SESSION_TOKEN` or `ANTHROPIC_API_KEY` (env or `ROOT/.env`) | Agent runtime (Claude auth) |
 | Docker daemon | Must be running and accessible |
 
 > The `GITHUB_TOKEN` env var is no longer required — the Manager resolves a
