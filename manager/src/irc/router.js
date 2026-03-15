@@ -19,9 +19,9 @@ import { listTeamChannels } from '../store/channels.js'
 
 const TAG_RE = /^\[([A-Z]+)\]\s*(.*)/
 
-// Ring buffer per channelId (UUID), capped at MAX_MESSAGES entries
-const MAX_MESSAGES = 500
-const buffers = new Map() // key: channelId (UUID)
+// Per-channel ring buffer: caps at MAX_MESSAGES to bound memory usage
+const MAX_MESSAGES = 500 // entries per channel
+const buffers = new Map() // key: channelId (UUID) → message[]
 
 // WebSocket broadcast callbacks registered by the WS layer
 const wsBroadcasters = new Set()
