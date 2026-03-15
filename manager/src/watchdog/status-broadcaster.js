@@ -79,11 +79,13 @@ export function startStatusBroadcaster() {
       const last = lastBroadcast.get(team.id) ?? startTime
       if (now - last < intervalMs) continue
 
-      // Record broadcast time before attempting send — avoids double-fire on slow gateways
-      lastBroadcast.set(team.id, now)
-
       const gw = getGateway(team.id)
       if (!gw) continue // gateway not connected yet — will retry next tick
+
+      // Record broadcast time after the null-gw check so a missing gateway does
+      // not delay the retry by a full interval.  Avoids double-fire on slow gateways
+      // once connected.
+      lastBroadcast.set(team.id, now)
 
       const rawChannel = cfg.channel ?? 'main'
       const channelName = rawChannel.startsWith('#') ? rawChannel : `#${rawChannel}`

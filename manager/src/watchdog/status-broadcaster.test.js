@@ -347,4 +347,25 @@ describe('startStatusBroadcaster', () => {
 
     expect(routeMessage).not.toHaveBeenCalled()
   })
+
+  it('retries broadcast on the very next tick once gateway becomes available (null-gw does not consume interval)', async () => {
+    const mockSay = vi.fn()
+    // First call: no gateway. Second call: gateway available.
+    getGateway
+      .mockReturnValueOnce(null)
+      .mockReturnValue({ say: mockSay })
+    listTeams.mockReturnValue([makeTeam()])
+
+    const { stop } = startStatusBroadcaster()
+    // First tick fires at DEFAULT_INTERVAL_MS — gateway is null, no broadcast, lastBroadcast NOT set.
+    await tick()
+    expect(mockSay).not.toHaveBeenCalled()
+
+    // Second tick fires at 2 × DEFAULT_INTERVAL_MS — gateway available, fires immediately
+    // because lastBroadcast was never set, so (now - startTime) >= intervalMs again.
+    await tick()
+    stop()
+
+    expect(mockSay).toHaveBeenCalledOnce()
+  })
 })
