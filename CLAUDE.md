@@ -1,6 +1,34 @@
 # CLAUDE.md — A1 Engineer
 
-## v2 Migration
+## Current focus: v1 polish
+
+The team is currently polishing the v1 codebase. No new features — bugs, cleanup, and test coverage only.
+
+### Shipped fixes (on main)
+
+| Commit | What |
+|--------|------|
+| `dc9971a` | refactor: extract `loadHistory`/`saveHistory` into `agent/lib/history.js` — removes 3 duplicate definitions |
+| `4f02460` | fix: atomic mv inbox race in `agent-entrypoint.sh`; add `test:e2e` npm script; remove `auth:session` override from `configs/testapp.json` |
+| `f44d8b8` | fix: cap `CHATHISTORY LATEST` first-run fetch at 50 messages (was 500) |
+| `fdc44fc` | fix: pass `githubToken` to `startTeam()` on create and restart — unblocks git push from agent containers |
+| `b51237f` | feat(test): add IRC response verification step to `smoke-test.sh` (Step 6b, skips if no `ANTHROPIC_API_KEY`) |
+
+### Active tasks
+
+- Task #9 (dev-3): `agent-entrypoint.sh` `.proc` cleanup + `CHATHISTORY AFTER` cap at 200 + router.js polish
+- Task #10 (dev-1): `@all` nudge mechanic in `manager/src/irc/router.js`
+
+### What to work on next
+
+See `test/README.md` for the test suite. Priority order:
+1. Polish pass — fix bugs/omissions flagged in IRC (critic-1 issues)
+2. E2E agent tests — real agent IRC loop with `ANTHROPIC_API_KEY`
+3. Docs — keep `CLAUDE.md` and `test/README.md` up to date
+
+---
+
+## v2 Migration *(on hold — v1 polish first)*
 
 This codebase is migrating from v1 (monolithic Manager + team-scoped compose) to v2 (Backend + Account Manager per-account + agent-first UX). The v1 code in `manager/`, `web/`, `agent/` is reference — new work targets the v2 structure.
 
