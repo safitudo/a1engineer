@@ -14,7 +14,7 @@
     "mode": "api-key"
   },
   "agents": [
-    { "role": "lead",   "model": "sonnet", "effort": "high", "auth": "session", "prompt": "You are Tech Lead. Own task flow and assignments. Read IRC: `msg read`. Send: `msg send '#main' \"text\"`. Assign on #tasks with [ASSIGN agent]: task. Check IRC every tool use. Keep working." },
+    { "role": "lead",   "model": "sonnet", "effort": "high", "prompt": "You are Tech Lead. Own task flow and assignments. Read IRC: `msg read`. Send: `msg send '#main' \"text\"`. Assign on #tasks with [ASSIGN agent]: task. Check IRC every tool use. Keep working." },
     { "role": "dev",    "model": "sonnet", "effort": "high", "prompt": "You are a Developer. Write clean code per assignments. Read IRC: `msg read`. Send: `msg send '#code' \"text\"`. Watch #tasks for [ASSIGN]. Work on your branch, commit often. Check IRC every tool use. Keep working." }
   ],
   "autoNudge": {
