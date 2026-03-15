@@ -56,7 +56,7 @@ router.post('/', async (req, res) => {
     addTeamChannel(team.id, channel.id)
   }
   try {
-    await startTeam(team, { apiKey: config.auth?.apiKey })
+    await startTeam(team, { apiKey: config.auth?.apiKey, githubToken: config.repo?.githubToken ?? null })
     teamStore.updateTeam(team.id, { status: 'running' })
     createGateway(team, { onMessage: routeMessage })
     // Inject fresh GitHub tokens into containers (5s delay for containers to be ready)
@@ -238,7 +238,7 @@ router.post('/:id/start', requireTeam, async (req, res) => {
   }
 
   try {
-    await startTeam(team, { apiKey: team.auth?.apiKey })
+    await startTeam(team, { apiKey: team.auth?.apiKey, githubToken: team.repo?.githubToken ?? null })
     teamStore.updateTeam(req.params.id, { status: 'running' })
     createGateway(teamStore.getTeam(req.params.id), { onMessage: routeMessage })
     const tokenRefresh = req.app.get('tokenRefresh')
