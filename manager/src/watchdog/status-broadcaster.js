@@ -15,10 +15,16 @@
  *
  * Note: v1 uses a single global interval (intervalMs param). Per-team intervalSeconds
  * is honoured at the enabled/channel level; custom per-team timing is a future enhancement.
+ *
+ * Each broadcast calls BOTH:
+ *   gw.say()       — delivers to IRC so live-connected clients see it
+ *   routeMessage() — populates the ring buffer so agents can read it via `msg read`
  */
 
 import * as teamStore from '../store/teams.js'
 import { getGateway } from '../irc/gateway.js'
+import { routeMessage } from '../irc/router.js'
+import { listTeamChannels } from '../store/channels.js'
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 const DEFAULT_CHANNEL = '#main'
@@ -72,9 +78,10 @@ export function buildBroadcastMessage(team) {
  * On every tick, loops through all running teams. For each team:
  *   - skips if team.statusBroadcast.enabled === false
  *   - skips if no active IRC gateway (getGateway returns null)
- *   - posts buildBroadcastMessage(team) to the configured channel
+ *   - calls gw.say() to deliver to IRC
+ *   - calls routeMessage() to populate the ring buffer for `msg read`
  *
- * Errors from gw.say() are caught and logged; they do not halt the loop.
+ * Errors are caught and logged; they do not halt the loop.
  *
  * @param {object} [opts]
  * @param {number} [opts.intervalMs] — override the broadcast interval in ms (useful for tests)
@@ -97,11 +104,29 @@ export function startStatusBroadcaster({ intervalMs = DEFAULT_INTERVAL_MS } = {}
       const gw = getGateway(team.id)
       if (!gw) continue
 
+      const text = buildBroadcastMessage(team)
+      const nick = `manager-${team.name}`
+      const time = new Date().toISOString()
+
+      // Resolve channelId from the team's channel store for ring-buffer keying
+      const channels = listTeamChannels(team.id)
+      const ch = channels.find((c) => c.name === channel)
+      const channelId = ch?.id ?? null
+
       try {
-        gw.say(channel, buildBroadcastMessage(team))
+        gw.say(channel, text)
       } catch (err) {
         console.warn(
-          `[status-broadcaster] failed for team ${team.id} (${team.name}): ${err.message}`,
+          `[status-broadcaster] gw.say failed for team ${team.id} (${team.name}): ${err.message}`,
+        )
+      }
+
+      // Always populate ring buffer regardless of gw.say success
+      try {
+        routeMessage({ teamId: team.id, channel, channelId, nick, text, time })
+      } catch (err) {
+        console.warn(
+          `[status-broadcaster] routeMessage failed for team ${team.id} (${team.name}): ${err.message}`,
         )
       }
     }

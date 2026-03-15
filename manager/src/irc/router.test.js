@@ -484,8 +484,10 @@ describe('routeMessage — @all nudge', () => {
     expect(writeFifo).not.toHaveBeenCalled()
   })
 
-  it('skips nudge when sender nick is a manager gateway nick (manager-* feedback loop prevention)', () => {
-    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'manager-alpha', text: '@all statuses | Team: alpha | Agents: dev' }))
+  it('skips nudge when sender nick is the team manager gateway nick (feedback loop prevention)', () => {
+    // team.name is 'nudge-test' → gateway nick is 'manager-nudge-test'
+    const gatewayNick = `manager-${team.name}`
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: gatewayNick, text: '@all statuses | Team: nudge-test | Agents: dev' }))
     expect(writeFifo).not.toHaveBeenCalled()
   })
 

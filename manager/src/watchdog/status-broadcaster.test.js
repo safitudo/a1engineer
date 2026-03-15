@@ -9,8 +9,18 @@ vi.mock('../irc/gateway.js', () => ({
   getGateway: vi.fn(),
 }))
 
+vi.mock('../irc/router.js', () => ({
+  routeMessage: vi.fn(),
+}))
+
+vi.mock('../store/channels.js', () => ({
+  listTeamChannels: vi.fn(),
+}))
+
 import { listTeams } from '../store/teams.js'
 import { getGateway } from '../irc/gateway.js'
+import { routeMessage } from '../irc/router.js'
+import { listTeamChannels } from '../store/channels.js'
 
 const makeTeam = (overrides = {}) => ({
   id: 'team-1',
@@ -34,6 +44,8 @@ async function tick(ms = 5 * 60 * 1000) {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  // Default: channel store returns empty list (channelId resolves to null)
+  listTeamChannels.mockReturnValue([])
 })
 
 afterEach(() => {
@@ -56,7 +68,7 @@ describe('buildBroadcastMessage', () => {
     expect(msg).toContain('lead — Coordinate the team.')
   })
 
-  it('omits sentence separator when agent has no prompt', () => {
+  it('omits em-dash when agent has no prompt', () => {
     const team = makeTeam()
     const msg = buildBroadcastMessage(team)
     // dev has null prompt — just role, no em-dash
@@ -114,6 +126,52 @@ describe('startStatusBroadcaster', () => {
     expect(text).toMatch(/^@all statuses \| Team: alpha/)
   })
 
+  it('calls routeMessage to populate ring buffer', async () => {
+    const say = makeSay()
+    listTeams.mockReturnValue([makeTeam()])
+    getGateway.mockReturnValue({ say })
+
+    const { stop } = startStatusBroadcaster({ intervalMs: 5 * 60 * 1000 })
+    await tick()
+    stop()
+
+    expect(routeMessage).toHaveBeenCalledOnce()
+    const event = routeMessage.mock.calls[0][0]
+    expect(event.teamId).toBe('team-1')
+    expect(event.channel).toBe('#main')
+    expect(event.nick).toBe('manager-alpha')
+    expect(event.text).toMatch(/^@all statuses \| Team: alpha/)
+    expect(event.time).toBeTruthy()
+  })
+
+  it('routeMessage receives channelId from listTeamChannels', async () => {
+    const say = makeSay()
+    listTeams.mockReturnValue([makeTeam()])
+    getGateway.mockReturnValue({ say })
+    listTeamChannels.mockReturnValue([{ id: 'ch-main-id', name: '#main' }])
+
+    const { stop } = startStatusBroadcaster({ intervalMs: 5 * 60 * 1000 })
+    await tick()
+    stop()
+
+    const event = routeMessage.mock.calls[0][0]
+    expect(event.channelId).toBe('ch-main-id')
+  })
+
+  it('routeMessage receives null channelId when channel not found in store', async () => {
+    const say = makeSay()
+    listTeams.mockReturnValue([makeTeam()])
+    getGateway.mockReturnValue({ say })
+    listTeamChannels.mockReturnValue([]) // no channels registered
+
+    const { stop } = startStatusBroadcaster({ intervalMs: 5 * 60 * 1000 })
+    await tick()
+    stop()
+
+    const event = routeMessage.mock.calls[0][0]
+    expect(event.channelId).toBeNull()
+  })
+
   it('skips teams not in running status', async () => {
     const say = makeSay()
     listTeams.mockReturnValue([makeTeam({ status: 'stopped' })])
@@ -124,6 +182,7 @@ describe('startStatusBroadcaster', () => {
     stop()
 
     expect(say).not.toHaveBeenCalled()
+    expect(routeMessage).not.toHaveBeenCalled()
   })
 
   it('skips teams with statusBroadcast.enabled === false', async () => {
@@ -136,19 +195,19 @@ describe('startStatusBroadcaster', () => {
     stop()
 
     expect(say).not.toHaveBeenCalled()
+    expect(routeMessage).not.toHaveBeenCalled()
   })
 
   it('skips teams where getGateway returns null', async () => {
     listTeams.mockReturnValue([makeTeam()])
     getGateway.mockReturnValue(null)
 
-    // No throw — just silent skip
     const { stop } = startStatusBroadcaster({ intervalMs: 5 * 60 * 1000 })
     await tick()
     stop()
 
-    // getGateway was called but say was never reached — no error
     expect(getGateway).toHaveBeenCalledWith('team-1')
+    expect(routeMessage).not.toHaveBeenCalled()
   })
 
   it('uses custom channel from statusBroadcast config', async () => {
@@ -160,8 +219,8 @@ describe('startStatusBroadcaster', () => {
     await tick()
     stop()
 
-    expect(say).toHaveBeenCalledOnce()
     expect(say.mock.calls[0][0]).toBe('#status')
+    expect(routeMessage.mock.calls[0][0].channel).toBe('#status')
   })
 
   it('defaults to #main when statusBroadcast.channel is not set', async () => {
@@ -174,6 +233,7 @@ describe('startStatusBroadcaster', () => {
     stop()
 
     expect(say.mock.calls[0][0]).toBe('#main')
+    expect(routeMessage.mock.calls[0][0].channel).toBe('#main')
   })
 
   it('broadcasts to multiple running teams in one tick', async () => {
@@ -193,6 +253,21 @@ describe('startStatusBroadcaster', () => {
 
     expect(say1).toHaveBeenCalledOnce()
     expect(say2).toHaveBeenCalledOnce()
+    expect(routeMessage).toHaveBeenCalledTimes(2)
+  })
+
+  it('still calls routeMessage when gw.say() throws', async () => {
+    const sayThrow = vi.fn().mockImplementation(() => { throw new Error('IRC disconnected') })
+    listTeams.mockReturnValue([makeTeam()])
+    getGateway.mockReturnValue({ say: sayThrow })
+
+    const { stop } = startStatusBroadcaster({ intervalMs: 5 * 60 * 1000 })
+    await expect(tick()).resolves.not.toThrow()
+    stop()
+
+    expect(sayThrow).toHaveBeenCalledOnce()
+    // routeMessage must still be called even when gw.say fails
+    expect(routeMessage).toHaveBeenCalledOnce()
   })
 
   it('continues to other teams when one gw.say() throws', async () => {
@@ -210,11 +285,11 @@ describe('startStatusBroadcaster', () => {
     await expect(tick()).resolves.not.toThrow()
     stop()
 
-    expect(sayThrow).toHaveBeenCalledOnce()
     expect(say2).toHaveBeenCalledOnce()
+    expect(routeMessage).toHaveBeenCalledTimes(2)
   })
 
-  it('stop() halts the interval — no further say() calls after stop', async () => {
+  it('stop() halts the interval — no further say() or routeMessage() calls', async () => {
     const say = makeSay()
     listTeams.mockReturnValue([makeTeam()])
     getGateway.mockReturnValue({ say })
@@ -224,6 +299,7 @@ describe('startStatusBroadcaster', () => {
 
     await tick()
     expect(say).not.toHaveBeenCalled()
+    expect(routeMessage).not.toHaveBeenCalled()
   })
 
   it('fires again on a second tick', async () => {
@@ -237,6 +313,7 @@ describe('startStatusBroadcaster', () => {
     stop()
 
     expect(say).toHaveBeenCalledTimes(2)
+    expect(routeMessage).toHaveBeenCalledTimes(2)
   })
 
   it('respects custom intervalMs option', async () => {
