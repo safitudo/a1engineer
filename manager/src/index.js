@@ -27,6 +27,7 @@ import { createApp } from './api/index.js'
 import { attachWebSocketServer } from './api/ws.js'
 import { startNudger } from './watchdog/nudger.js'
 import { startTokenRefresh } from './watchdog/token-refresh.js'
+import { startStatusBroadcaster } from './watchdog/status-broadcaster.js'
 
 const [, , command, ...rest] = process.argv
 
@@ -191,6 +192,7 @@ async function main() {
       })
       attachWebSocketServer(server)
       startNudger()
+      startStatusBroadcaster()
       const tokenRefresh = startTokenRefresh()
       // Expose refreshNow so team creation can trigger immediate token injection
       app.set('tokenRefresh', tokenRefresh)

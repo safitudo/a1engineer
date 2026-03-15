@@ -484,6 +484,11 @@ describe('routeMessage — @all nudge', () => {
     expect(writeFifo).not.toHaveBeenCalled()
   })
 
+  it('skips nudge when sender nick is a manager gateway nick (manager-* feedback loop prevention)', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'manager-alpha', text: '@all statuses | Team: alpha | Agents: dev' }))
+    expect(writeFifo).not.toHaveBeenCalled()
+  })
+
   it('is case-insensitive — @ALL triggers nudge', () => {
     routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'hey @ALL' }))
     expect(writeFifo).toHaveBeenCalledTimes(2)

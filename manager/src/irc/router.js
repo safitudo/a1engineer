@@ -81,7 +81,7 @@ export function routeMessage(event) {
     const team = getTeam(teamId)
     const agents = team?.agents ?? []
     const agentIds = new Set(agents.map((a) => a.id))
-    if (!agentIds.has(nick)) {
+    if (!agentIds.has(nick) && !nick.startsWith('manager-')) {
       Promise.allSettled(
         agents.map((a) =>
           writeFifo(teamId, a.id, `nudge @all from ${nick} in ${channel}: ${text}`)
