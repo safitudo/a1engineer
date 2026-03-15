@@ -29,6 +29,11 @@ jobs:
         working-directory: manager
         run: npm test
 
+      # ── Manager E2E tests (node:test + module mocks) ─────────────────────────
+      - name: Run manager e2e tests
+        working-directory: manager
+        run: npm run test:e2e
+
       # ── Web build check (next build) ────────────────────────────────────────
       - name: Install web dependencies
         working-directory: web
