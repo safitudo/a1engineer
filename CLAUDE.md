@@ -13,11 +13,12 @@ The team is currently polishing the v1 codebase. No new features — bugs, clean
 | `f44d8b8` | fix: cap `CHATHISTORY LATEST` first-run fetch at 50 messages (was 500) |
 | `fdc44fc` | fix: pass `githubToken` to `startTeam()` on create and restart — unblocks git push from agent containers |
 | `b51237f` | feat(test): add IRC response verification step to `smoke-test.sh` (Step 6b, skips if no `ANTHROPIC_API_KEY`) |
+| `59c113b` | feat(test): Task #11 — `e2e-agent.mjs` Level B real-agent test; smoke-test observer race fix; `irc-check.mjs` `filter_nick`; `SESSION_TOKEN` priority + dotenv layered credential loading |
+| `0f78790` | feat(watchdog): Task #14 — `status-broadcaster.js` posts team status to `#main` every 5 min; router.js `@all` feedback-loop guard (skip nudge when sender is gateway nick) |
 
 ### Active tasks
 
-- Task #9 (dev-3): `agent-entrypoint.sh` `.proc` cleanup + `CHATHISTORY AFTER` cap at 200 + router.js polish
-- Task #10 (dev-1): `@all` nudge mechanic in `manager/src/irc/router.js`
+*(none — Tasks #9 and #10 shipped; Tasks #11 and #14 shipped above)*
 
 ### What to work on next
 
