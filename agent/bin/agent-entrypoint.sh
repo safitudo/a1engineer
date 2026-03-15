@@ -145,6 +145,7 @@ while true; do
     mv "$INBOX" "${INBOX}.proc"
     touch "$INBOX"
     MSG=$(cat "${INBOX}.proc")
+    rm -f "${INBOX}.proc"
     echo "[agent] processing: ${MSG:0:80}..."
     if [ -n "$SESSION_ID" ]; then
       RESULT=$(claude --print --dangerously-skip-permissions --model "$MODEL" \
