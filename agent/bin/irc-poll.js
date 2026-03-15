@@ -38,6 +38,9 @@ async function poll() {
         })
       }
       results.set(ch, messages)
+      if (messages.length === 200) {
+        console.warn(`[irc-poll] CHATHISTORY cap hit on ${ch} — agent may have missed messages`)
+      }
       pending.delete(ch)
       if (pending.size === 0) done()
     }
