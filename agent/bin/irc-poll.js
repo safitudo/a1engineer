@@ -49,7 +49,7 @@ async function poll() {
       if (cursor?.msgid) {
         client.raw(`CHATHISTORY AFTER ${ch} msgid=${cursor.msgid} 500`)
       } else {
-        client.raw(`CHATHISTORY LATEST ${ch} * 500`)
+        client.raw(`CHATHISTORY LATEST ${ch} * 50`)
       }
     }
 
