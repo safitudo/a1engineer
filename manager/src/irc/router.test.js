@@ -484,6 +484,14 @@ describe('routeMessage — @all nudge', () => {
     expect(writeFifo).not.toHaveBeenCalled()
   })
 
+  it('skips nudge when sender nick is the manager gateway nick (status-broadcaster loop prevention)', () => {
+    // status-broadcaster posts "@all statuses ..." to IRC as manager-{teamName}
+    // Without this guard, every broadcast would FIFO-nudge all agents.
+    const gatewayNick = `manager-${team.name}`
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: gatewayNick, text: '@all statuses | Team: nudge-test | Agents: lead, dev' }))
+    expect(writeFifo).not.toHaveBeenCalled()
+  })
+
   it('is case-insensitive — @ALL triggers nudge', () => {
     routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'hey @ALL' }))
     expect(writeFifo).toHaveBeenCalledTimes(2)
@@ -512,6 +520,13 @@ describe('routeMessage — @all nudge', () => {
 
   it('does not fire for unknown teamId', () => {
     routeMessage(makeEvent({ teamId: 'no-such-team', channelId: CH_MAIN_ID, nick: 'stanislav', text: '@all hello' }))
+    expect(writeFifo).not.toHaveBeenCalled()
+  })
+
+  it('skips nudge when sender nick is the IRC gateway nick (manager-{teamName}) — prevents status-broadcaster loop', () => {
+    // The gateway nick for team 'nudge-test' is 'manager-nudge-test'
+    const gatewayNick = `manager-${team.name}`
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: gatewayNick, text: '@all statuses | Team: nudge-test | Agents: dev' }))
     expect(writeFifo).not.toHaveBeenCalled()
   })
 })

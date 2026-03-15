@@ -76,12 +76,16 @@ export function routeMessage(event) {
   }
 
   // @all nudge — when a human types @all, wake every agent in the team in parallel.
-  // Guard: skip if the sender is itself an agent (prevents agent→agent nudge loops).
+  // Guards:
+  //   1. Skip if the sender is itself an agent (prevents agent→agent nudge loops).
+  //   2. Skip if the sender is the manager gateway nick (prevents status-broadcaster
+  //      "@all statuses..." messages from FIFO-nudging all agents every 5 minutes).
   if (ALL_RE.test(text)) {
     const team = getTeam(teamId)
     const agents = team?.agents ?? []
     const agentIds = new Set(agents.map((a) => a.id))
-    if (!agentIds.has(nick)) {
+    const gatewayNick = team ? `manager-${team.name}` : null
+    if (!agentIds.has(nick) && nick !== gatewayNick) {
       Promise.allSettled(
         agents.map((a) =>
           writeFifo(teamId, a.id, `nudge @all from ${nick} in ${channel}: ${text}`)
