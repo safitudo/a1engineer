@@ -21,6 +21,11 @@
     "enabled": true,
     "idleThresholdSeconds": 300
   },
+  "statusBroadcast": {
+    "enabled": true,
+    "channel": "#main",
+    "intervalSeconds": 300
+  },
   "ergo": {
     "image": "a1-ergo:latest",
     "configPath": "./templates/ergo/ircd.yaml",

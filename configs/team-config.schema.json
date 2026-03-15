@@ -148,6 +148,30 @@
         }
       }
     },
+    "statusBroadcast": {
+      "type": "object",
+      "description": "Periodic @all status broadcast settings. Every intervalSeconds the manager posts \"@all statuses | Team: {name} | Agents: {roster}\" to the broadcast channel so all agents have current team context in their IRC log.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable status broadcasts for this team. Defaults to true. Set to false to silence broadcasts.",
+          "default": true
+        },
+        "channel": {
+          "type": "string",
+          "description": "IRC channel to post the status broadcast into. Defaults to '#main'.",
+          "pattern": "^#[a-z][a-z0-9-]*$",
+          "default": "#main"
+        },
+        "intervalSeconds": {
+          "type": "integer",
+          "description": "Broadcast interval in seconds. Stored for future per-team interval support; the global interval is set at Manager startup. Defaults to 300 (5 min).",
+          "default": 300,
+          "minimum": 60
+        }
+      }
+    },
     "channels": {
       "type": "array",
       "items": { "type": "string", "pattern": "^#[a-z][a-z0-9-]*$" },
