@@ -1,5 +1,7 @@
 import { listTeams } from '../store/teams.js'
+import { listTeamChannels } from '../store/channels.js'
 import { getGateway } from '../irc/gateway.js'
+import { routeMessage } from '../irc/router.js'
 
 const TICK_INTERVAL_MS = 60_000 // check every 60 s; actual broadcast rate governed by intervalSeconds
 const DEFAULT_INTERVAL_SECONDS = 300 // 5 minutes
@@ -90,6 +92,20 @@ export function startStatusBroadcaster() {
 
       try {
         gw.say(channelName, msg)
+        // Also populate the ring buffer so agents can read status via msg read.
+        // The @all guard in router.js excludes manager-{teamName} from FIFO nudge,
+        // so this call does NOT cause a feedback loop.
+        const teamChannels = listTeamChannels(team.id)
+        const ch = teamChannels.find(c => c.name === channelName)
+        routeMessage({
+          teamId: team.id,
+          teamName: team.name,
+          channel: channelName,
+          channelId: ch?.id ?? null,
+          nick: `manager-${team.name}`,
+          text: msg,
+          time: new Date().toISOString(),
+        })
         console.log(`[status-broadcaster] ${team.name} → ${channelName}`)
       } catch (err) {
         console.warn(`[status-broadcaster] failed for team ${team.name}: ${err.message}`)

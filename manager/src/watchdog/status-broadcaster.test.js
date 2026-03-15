@@ -5,12 +5,22 @@ vi.mock('../store/teams.js', () => ({
   listTeams: vi.fn(),
 }))
 
+vi.mock('../store/channels.js', () => ({
+  listTeamChannels: vi.fn(),
+}))
+
 vi.mock('../irc/gateway.js', () => ({
   getGateway: vi.fn(),
 }))
 
+vi.mock('../irc/router.js', () => ({
+  routeMessage: vi.fn(),
+}))
+
 import { listTeams } from '../store/teams.js'
+import { listTeamChannels } from '../store/channels.js'
 import { getGateway } from '../irc/gateway.js'
+import { routeMessage } from '../irc/router.js'
 
 const NOW = new Date('2024-01-01T12:00:00.000Z').getTime()
 const DEFAULT_INTERVAL_MS = 300_000 // 5 minutes — must match DEFAULT_INTERVAL_SECONDS * 1000
@@ -38,6 +48,8 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(NOW)
   vi.clearAllMocks()
+  // Default: no channels in store (channelId will be null)
+  listTeamChannels.mockReturnValue([])
 })
 
 afterEach(() => {
@@ -287,5 +299,52 @@ describe('startStatusBroadcaster', () => {
     await tick()
 
     expect(mockSay).not.toHaveBeenCalled()
+  })
+
+  it('calls routeMessage() after gw.say() to populate the ring buffer', async () => {
+    const mockSay = vi.fn()
+    getGateway.mockReturnValue({ say: mockSay })
+    const team = makeTeam()
+    listTeams.mockReturnValue([team])
+    listTeamChannels.mockReturnValue([{ id: 'ch-main-uuid', name: '#main' }])
+
+    const { stop } = startStatusBroadcaster()
+    await tick()
+    stop()
+
+    expect(routeMessage).toHaveBeenCalledOnce()
+    const event = routeMessage.mock.calls[0][0]
+    expect(event.teamId).toBe(team.id)
+    expect(event.teamName).toBe(team.name)
+    expect(event.channel).toBe('#main')
+    expect(event.channelId).toBe('ch-main-uuid')
+    expect(event.nick).toBe(`manager-${team.name}`)
+    expect(event.text).toMatch(/^@all statuses \| Team: myteam \| Agents:/)
+    expect(typeof event.time).toBe('string')
+  })
+
+  it('passes null channelId to routeMessage when channel not found in store', async () => {
+    const mockSay = vi.fn()
+    getGateway.mockReturnValue({ say: mockSay })
+    listTeams.mockReturnValue([makeTeam()])
+    listTeamChannels.mockReturnValue([]) // no matching channel in store
+
+    const { stop } = startStatusBroadcaster()
+    await tick()
+    stop()
+
+    expect(routeMessage).toHaveBeenCalledOnce()
+    expect(routeMessage.mock.calls[0][0].channelId).toBeNull()
+  })
+
+  it('does not call routeMessage when gateway is null', async () => {
+    getGateway.mockReturnValue(null)
+    listTeams.mockReturnValue([makeTeam()])
+
+    const { stop } = startStatusBroadcaster()
+    await tick()
+    stop()
+
+    expect(routeMessage).not.toHaveBeenCalled()
   })
 })
