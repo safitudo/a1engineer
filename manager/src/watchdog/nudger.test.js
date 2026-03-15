@@ -184,6 +184,16 @@ describe('startNudger', () => {
     expect(writeFifo).not.toHaveBeenCalled()
   })
 
+  it('defaults to enabled when team has no autoNudge property', async () => {
+    listTeams.mockReturnValue([makeTeam({ autoNudge: undefined })])
+
+    const { stop } = startNudger()
+    await tick()
+    stop()
+
+    expect(writeFifo).toHaveBeenCalledOnce()
+  })
+
   it('skips teams with autoNudge disabled', async () => {
     listTeams.mockReturnValue([makeTeam({ autoNudge: { enabled: false } })])
 

@@ -49,6 +49,14 @@ describe('github/app', () => {
       expect(opts.headers.Accept).toBe('application/vnd.github+json')
     })
 
+    it('throws when no private key is available (no config, no env vars)', async () => {
+      delete process.env.GITHUB_APP_PRIVATE_KEY
+      delete process.env.GITHUB_APP_PRIVATE_KEY_PATH
+      await expect(
+        createInstallationToken({ appId: '12345', installationId: '67890' })
+      ).rejects.toThrow('private key')
+    })
+
     it('throws on missing appId', async () => {
       await expect(
         createInstallationToken({ installationId: '67890', privateKey: TEST_PEM })
@@ -130,6 +138,77 @@ describe('github/app', () => {
       expect(first.token).toBe('ghs_cached')
       expect(second.token).toBe('ghs_cached')
       expect(mockFetch).toHaveBeenCalledOnce() // only one API call
+    })
+
+    it('refreshes token when cached token is within REFRESH_MARGIN_MS of expiry', async () => {
+      // First call: return a token expiring in 4 minutes (inside the 5-min refresh margin)
+      const nearExpiry = new Date(Date.now() + 4 * 60 * 1000).toISOString()
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: 'ghs_expiring', expires_at: nearExpiry }),
+      })
+      // Second call: GitHub returns a fresh long-lived token
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: 'ghs_fresh', expires_at: '2099-01-01T00:00:00Z' }),
+      })
+
+      await getInstallationToken({ appId: '12345', installationId: '67890', privateKey: TEST_PEM })
+      const second = await getInstallationToken({ appId: '12345', installationId: '67890', privateKey: TEST_PEM })
+
+      // Near-expiry cached token must not be served — a fresh fetch must occur
+      expect(second.token).toBe('ghs_fresh')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('caches tokens independently per installationId', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ token: 'ghs_install_1', expires_at: '2099-01-01T00:00:00Z' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ token: 'ghs_install_2', expires_at: '2099-01-01T00:00:00Z' }),
+        })
+
+      const t1 = await getInstallationToken({ appId: '12345', installationId: '11111', privateKey: TEST_PEM })
+      const t2 = await getInstallationToken({ appId: '12345', installationId: '22222', privateKey: TEST_PEM })
+
+      expect(t1.token).toBe('ghs_install_1')
+      expect(t2.token).toBe('ghs_install_2')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+
+      // Subsequent calls for each installation ID hit their own cache entries
+      const t1Again = await getInstallationToken({ appId: '12345', installationId: '11111', privateKey: TEST_PEM })
+      const t2Again = await getInstallationToken({ appId: '12345', installationId: '22222', privateKey: TEST_PEM })
+
+      expect(t1Again.token).toBe('ghs_install_1')
+      expect(t2Again.token).toBe('ghs_install_2')
+      expect(mockFetch).toHaveBeenCalledTimes(2) // no additional API calls
+    })
+  })
+
+  describe('clearTokenCache', () => {
+    it('evicts all cached tokens so the next call fetches fresh', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: 'ghs_v1', expires_at: '2099-01-01T00:00:00Z' }),
+      })
+
+      await getInstallationToken({ appId: '12345', installationId: '67890', privateKey: TEST_PEM })
+      expect(mockFetch).toHaveBeenCalledOnce()
+
+      clearTokenCache()
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ token: 'ghs_v2', expires_at: '2099-01-01T00:00:00Z' }),
+      })
+
+      const after = await getInstallationToken({ appId: '12345', installationId: '67890', privateKey: TEST_PEM })
+      expect(after.token).toBe('ghs_v2')
+      expect(mockFetch).toHaveBeenCalledTimes(2) // cache was cleared — forced a second API call
     })
   })
 

@@ -38,6 +38,9 @@ async function poll() {
         })
       }
       results.set(ch, messages)
+      if (messages.length === 200) {
+        console.warn(`[irc-poll] CHATHISTORY cap hit on ${ch} — agent may have missed messages`)
+      }
       pending.delete(ch)
       if (pending.size === 0) done()
     }
@@ -61,6 +64,9 @@ async function poll() {
   for (const [ch, msgs] of results) {
     if (msgs.length > 0) {
       lines.push(`── ${ch} (${msgs.length} new) ──`)
+      if (msgs.length === 200) {
+        lines.push(`  WARNING: CHATHISTORY cap hit on ${ch} — messages may have been missed`)
+      }
       for (const m of msgs) {
         const time = m.ts ? m.ts.replace(/.*T/, '').replace(/\.\d+Z/, '') : '??:??'
         lines.push(`  [${time}] <${m.nick}> ${m.text}`)
