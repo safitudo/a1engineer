@@ -16,8 +16,10 @@
 
 import { getTeam } from '../store/teams.js'
 import { listTeamChannels } from '../store/channels.js'
+import { writeFifo } from '../orchestrator/fifo.js'
 
 const TAG_RE = /^\[([A-Z]+)\]\s*(.*)/
+const ALL_RE = /@all\b/i
 
 // Per-channel ring buffer: caps at MAX_MESSAGES to bound memory usage
 const MAX_MESSAGES = 500 // entries per channel
@@ -54,7 +56,7 @@ function parseTag(text) {
  * @param {object} event - { teamId, teamName, channel, channelId, nick, text, time }
  */
 export function routeMessage(event) {
-  const { channelId, text } = event
+  const { teamId, channelId, nick, channel, text } = event
 
   const structured = parseTag(text)
   const entry = {
@@ -70,6 +72,21 @@ export function routeMessage(event) {
       broadcast(entry)
     } catch {
       // Individual broadcaster errors must not break routing
+    }
+  }
+
+  // @all nudge — when a human types @all, wake every agent in the team in parallel.
+  // Guard: skip if the sender is itself an agent (prevents agent→agent nudge loops).
+  if (ALL_RE.test(text)) {
+    const team = getTeam(teamId)
+    const agents = team?.agents ?? []
+    const agentIds = new Set(agents.map((a) => a.id))
+    if (!agentIds.has(nick)) {
+      Promise.allSettled(
+        agents.map((a) =>
+          writeFifo(teamId, a.id, `nudge @all from ${nick} in ${channel}: ${text}`)
+        )
+      )
     }
   }
 }

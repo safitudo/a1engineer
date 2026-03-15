@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
+
+// Must be declared before router.js is imported so vitest hoists it correctly
+vi.mock('../orchestrator/fifo.js', () => ({
+  writeFifo: vi.fn().mockResolvedValue(undefined),
+}))
+
+import { writeFifo } from '../orchestrator/fifo.js'
 import {
   routeMessage,
   readMessages,
@@ -432,5 +439,79 @@ describe('clearTeamBuffers', () => {
 
   it('is safe to call on a team with no buffers', () => {
     expect(() => clearTeamBuffers('nonexistent-team')).not.toThrow()
+  })
+})
+
+// ── routeMessage — @all nudge ──────────────────────────────────────────────────
+
+describe('routeMessage — @all nudge', () => {
+  let team
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    team = createTeam({
+      name: 'nudge-test',
+      agents: [{ role: 'lead' }, { role: 'dev' }],
+    })
+  })
+
+  afterEach(() => {
+    clearTeamBuffers(team.id)
+  })
+
+  it('fires writeFifo for every agent when @all appears in message', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'hey @all please check in' }))
+    expect(writeFifo).toHaveBeenCalledTimes(2)
+    const agentIds = team.agents.map((a) => a.id)
+    expect(writeFifo.mock.calls.map((c) => c[1])).toEqual(expect.arrayContaining(agentIds))
+  })
+
+  it('passes correct teamId and nudge command format', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', channel: CHANNEL, text: '@all status?' }))
+    const [teamId, , cmd] = writeFifo.mock.calls[0]
+    expect(teamId).toBe(team.id)
+    expect(cmd).toBe(`nudge @all from stanislav in ${CHANNEL}: @all status?`)
+  })
+
+  it('does not fire writeFifo for regular messages without @all', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'hello everyone' }))
+    expect(writeFifo).not.toHaveBeenCalled()
+  })
+
+  it('skips nudge when sender nick is an agent ID (loop prevention)', () => {
+    const agentNick = team.agents[0].id // e.g. 'nudge-test-lead'
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: agentNick, text: 'hey @all status' }))
+    expect(writeFifo).not.toHaveBeenCalled()
+  })
+
+  it('is case-insensitive — @ALL triggers nudge', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'hey @ALL' }))
+    expect(writeFifo).toHaveBeenCalledTimes(2)
+  })
+
+  it('is case-insensitive — @All triggers nudge', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'hey @All check this' }))
+    expect(writeFifo).toHaveBeenCalledTimes(2)
+  })
+
+  it('triggers when @all appears mid-message', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'please @all check status now' }))
+    expect(writeFifo).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not trigger on partial match — @alliance does not count', () => {
+    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: 'join the @alliance channel' }))
+    expect(writeFifo).not.toHaveBeenCalled()
+  })
+
+  it('does not fire when team has no agents', () => {
+    const emptyTeam = createTeam({ name: 'empty', agents: [] })
+    routeMessage(makeEvent({ teamId: emptyTeam.id, channelId: CH_MAIN_ID, nick: 'stanislav', text: '@all hello' }))
+    expect(writeFifo).not.toHaveBeenCalled()
+  })
+
+  it('does not fire for unknown teamId', () => {
+    routeMessage(makeEvent({ teamId: 'no-such-team', channelId: CH_MAIN_ID, nick: 'stanislav', text: '@all hello' }))
+    expect(writeFifo).not.toHaveBeenCalled()
   })
 })
