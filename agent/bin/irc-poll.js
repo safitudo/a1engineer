@@ -47,7 +47,7 @@ async function poll() {
     for (const ch of config.channels) {
       const cursor = cursors[ch]
       if (cursor?.msgid) {
-        client.raw(`CHATHISTORY AFTER ${ch} msgid=${cursor.msgid} 500`)
+        client.raw(`CHATHISTORY AFTER ${ch} msgid=${cursor.msgid} 200`)
       } else {
         client.raw(`CHATHISTORY LATEST ${ch} * 50`)
       }
