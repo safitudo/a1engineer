@@ -255,6 +255,44 @@ else
   fail 6 "POST /channels/messages returned $MSG_RESP — $BODY" 3
 fi
 
+# ── Step 6b: verify agent responded in IRC (requires ANTHROPIC_API_KEY) ───────
+echo
+echo -e "${CYAN}═══ Step 6b: verify agent IRC response (60s) ═══${RESET}"
+
+IRC_STEP_PASS=0
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  warn "ANTHROPIC_API_KEY not set — skipping IRC response check (set it for full functional test)"
+  IRC_STEP_PASS=1
+elif [[ -z "$IRC_HOST_PORT" ]]; then
+  warn "Ergo has no exposed host port — skipping IRC response check"
+  IRC_STEP_PASS=1
+else
+  # Send a PING message to #main so the agent has something to respond to
+  # (step 6 already sent one, but give the agent a clear prompt here)
+  info "Sending PING to #main for agent response test…"
+  curl -s -o /dev/null \
+    -X POST \
+    -H "Authorization: Bearer $SMOKE_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"text":"[smoke-test] PING — please respond to confirm you are online"}' \
+    "http://localhost:$MANAGER_PORT/api/teams/$TEAM_ID/channels/main/messages" || true
+
+  # Connect to Ergo as observer and wait up to 60s for any agent reply
+  CHECKER_NICK="smoke-checker-$$"
+  info "Waiting up to 60s for agent response in #main (observer nick: $CHECKER_NICK)…"
+  if (cd "$ROOT/manager" && node "$ROOT/test/irc-check.mjs" localhost "$IRC_HOST_PORT" '#main' 60000 "$CHECKER_NICK"); then
+    pass "6b" "agent responded in #main"
+    IRC_STEP_PASS=1
+  else
+    warn "No agent response in #main within 60s — agent may still be starting or API key mode needs more time"
+    IRC_STEP_PASS=0
+  fi
+fi
+
+if [[ $IRC_STEP_PASS -eq 0 ]]; then
+  fail "6b" "IRC response check failed — agent did not respond within 60s" 3
+fi
+
 # ── Step 7: destroy-team ──────────────────────────────────────────────────────
 echo
 echo -e "${CYAN}═══ Step 7: destroy-team ═══${RESET}"
