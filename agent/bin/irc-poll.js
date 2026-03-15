@@ -64,6 +64,9 @@ async function poll() {
   for (const [ch, msgs] of results) {
     if (msgs.length > 0) {
       lines.push(`── ${ch} (${msgs.length} new) ──`)
+      if (msgs.length === 200) {
+        lines.push(`  WARNING: CHATHISTORY cap hit on ${ch} — messages may have been missed`)
+      }
       for (const m of msgs) {
         const time = m.ts ? m.ts.replace(/.*T/, '').replace(/\.\d+Z/, '') : '??:??'
         lines.push(`  [${time}] <${m.nick}> ${m.text}`)
