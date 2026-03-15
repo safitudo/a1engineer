@@ -1,127 +1,175 @@
-# A1 Engineer — Test Suite
+# A1 Engineer — Test Utilities
 
-Three levels of test coverage, each with different requirements.
-
----
-
-## Level 1 — Unit tests (vitest)
-
-**No Docker, no IRC, no API key required.**
-
-```bash
-cd manager
-npm test
-```
-
-Runs all `*.test.js` files under `manager/src/` via [vitest](https://vitest.dev/).
-Covers: auth middleware, team CRUD, compose rendering, IRC router logic, agent launch/stop.
-
-**Required env vars:** none
+This directory contains end-to-end and smoke-test tooling for the A1 Engineer
+platform.
 
 ---
 
-## Level 2 — E2E tests (node:test)
+## `smoke-test.sh` — Fast smoke test (CI-safe)
 
-**No Docker required. Tests Manager + IRC routing in-process.**
+An 8-step bash script that validates the full team lifecycle without requiring
+a real Anthropic API key (steps 1–5, 7–8) or a live agent response (step 6b is
+skipped when `ANTHROPIC_API_KEY` is absent).
 
-```bash
-cd manager
-npm run test:e2e
+```
+./test/smoke-test.sh [configs/testapp.json]
 ```
 
-Runs `node --test --experimental-test-module-mocks src/e2e/*.test.js`.
-Covers: full HTTP request/response cycles, Manager state transitions, IRC message routing through the real router code.
+**Default config:** `configs/testapp.json`
 
-> **Note:** These tests use Node.js built-in `node:test` runner with module mocks — requires Node >= 22.
+### Steps
 
-**Required env vars:** none
+| # | What | Failure exit |
+|---|------|-------------|
+| 1 | `make build` | 1 |
+| 2 | POST /api/teams — create team | 2 |
+| 3 | Containers reach running state (120 s) | 4 |
+| 4 | Ergo IRC accepts connections | 3 |
+| 5 | All agent containers are `running` | 4 |
+| 6 | POST /channels/main/messages → 200 | 3 |
+| 6b | IRC observer gets a reply from agent (60 s) — **skipped without `ANTHROPIC_API_KEY`** | 3 |
+| 7 | DELETE /api/teams/:id → 204 | 5 |
+| 8 | Containers stopped, Docker network removed | 5 |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All steps passed |
+| 1 | `make build` failed |
+| 2 | Team creation failed |
+| 3 | IRC / messaging step failed |
+| 4 | Container health failed |
+| 5 | Teardown failed |
+
+### Environment
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `ANTHROPIC_API_KEY` | Optional | Enables step 6b (agent IRC response check) |
 
 ---
 
-## Level 3 — Smoke test (Docker)
+## `e2e-agent.mjs` — Level B end-to-end test (real agent + GitHub PR)
 
-**Requires Docker. Starts real containers.**
+A standalone Node ESM script that runs the **full agent task loop**: starts a
+real team, sends the agent an actual coding task over IRC, and asserts that a
+GitHub pull request appears in `safitudo/a1-test-repo` within 5 minutes.
 
-```bash
-bash test/smoke-test.sh [configs/testapp.json]
+```
+node test/e2e-agent.mjs [configs/testapp.json]
 ```
 
-Builds images, starts a real team (Ergo IRC + agent containers), verifies health, posts a message, then tears everything down.
+**Default config:** `configs/testapp.json`
 
-**Steps:**
-1. `make build` — build all Docker images
-2. Create team via `POST /api/teams`
-3. Wait for containers to reach `running` state (timeout 120s)
-4. Verify Ergo IRC accepts connections
-5. Verify all agent containers are running
-6. `POST /api/teams/:id/channels/main/messages` — send a message
-7. Destroy team via `DELETE /api/teams/:id`
-8. Verify containers stopped and Docker network removed
+### Credential loading
 
-**Required env vars:** none (Docker must be running)
+The script uses a layered credential resolution strategy so it works in both
+local dev (`.env` file) and CI (environment variables) without code changes:
 
-**Optional:** pass a different config file as `$1` (default: `configs/testapp.json`)
+1. **`SESSION_TOKEN`** *(priority)* — Claude Max session token. Checked in
+   `process.env` first; if absent, loaded from `ROOT/.env`. When present,
+   overrides `testapp.json` `auth.mode` to `"session"`. This is the local
+   developer path (Stan's machine).
+2. **`ANTHROPIC_API_KEY`** *(fallback)* — Standard Claude API key. Checked in
+   `process.env` first; if absent, loaded from `ROOT/.env`. Keeps
+   `testapp.json` `auth.mode` as `"api-key"` (the default). This is the CI
+   path. The test exits 0 with a graceful skip if **neither** token is found.
+3. **GitHub token** — after team creation, read from
+   `/tmp/a1-teams/$TEAM_ID/github_token.txt` (written by the Manager when it
+   resolves the GitHub App credentials from `testapp.json`). Falls back to
+   `GITHUB_TOKEN` env var / `ROOT/.env`. If neither is available the GitHub
+   polling step fails with a descriptive error.
+4. **GitHub App creds** — provided via `testapp.json` (`appId`, `installationId`,
+   `privateKeyPath`). The Manager resolves these automatically.
+
+### Prerequisites
+
+The script exits 0 (graceful skip) if any prerequisite is absent:
+
+| Prerequisite | Purpose |
+|--------------|---------|
+| `SESSION_TOKEN` or `ANTHROPIC_API_KEY` (env or `ROOT/.env`) | Agent runtime (Claude auth) |
+| Docker daemon | Must be running and accessible |
+
+> The `GITHUB_TOKEN` env var is no longer required — the Manager resolves a
+> token via the GitHub App and writes it to the team directory. The test reads
+> it from there.
+
+### Steps
+
+| # | What | Failure exit |
+|---|------|-------------|
+| 1 | Start Manager on a free port | 1 |
+| 2 | POST /api/teams — create team | 1 |
+| 3 | Containers reach running state (120 s) | 1 |
+| 4 | Ergo IRC accepts connections | 1 |
+| 5 | Start IRC observer → send task → agent replies in #main (60 s) | 3 |
+| 6 | Poll GitHub for new PR in `safitudo/a1-test-repo` (5 min) | 3 |
+| 7 | Close PR via GitHub API | 1 |
+| 8 | DELETE /api/teams/:id → 204 | 1 |
+
+### Task sent to agent
+
+```
+[e2e-test] Please create a file named `test-e2e-{timestamp}.txt` containing
+exactly the text "OK" and open a pull request for it in the repository
+(safitudo/a1-test-repo). This is an automated test. PR title should start
+with "e2e-test".
+```
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All steps passed (or prerequisites absent — graceful skip) |
+| 1 | Setup / config failure |
+| 3 | Agent timeout or PR not found within limit |
+
+### Cleanup
+
+On any exit (success or failure) the script:
+1. Closes the created PR (if any)
+2. Destroys the team via Manager API
+3. Force-stops Docker containers
+4. Kills the Manager process
 
 ---
 
-## Level 4 — Full agent IRC loop (Docker + Claude API)
+## `irc-check.mjs` — IRC response verifier
 
-**Requires Docker + Anthropic API key. Tests the complete agent → IRC → response loop.**
+A low-level utility used by both `smoke-test.sh` and `e2e-agent.mjs`. Connects
+to an Ergo IRC server as an observer, joins a channel, and waits for a
+qualifying `PRIVMSG`. Exits 0 on success, 1 on timeout.
 
-```bash
-ANTHROPIC_API_KEY=sk-ant-... bash test/smoke-test.sh
-```
-
-Runs all Level 3 steps, then adds **Step 6b**:
-
-- Sends a `PING` message to `#main` via the Manager API
-- Waits up to **60 seconds** for any agent response in `#main`
-- Uses `test/irc-check.mjs` as an IRC observer (connects to Ergo, joins `#main`, listens for `PRIVMSG`)
-- **PASS** if agent responds within timeout; **FAIL** (exit 3) if no response
-
-Step 6b is **skipped automatically** if:
-- `ANTHROPIC_API_KEY` is not set, or
-- Ergo does not expose a host port (internal-only networks)
-
-### Required env vars
-
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key for the agent. Required for Step 6b. |
-
-### Isolation guarantee
-
-The smoke test creates a fresh team with a unique ID (`test-irc-<timestamp>`) and tears it down on exit (including `SIGINT`). It will never touch or interfere with any live team containers.
-
-### Running with a custom key in CI
-
-Store `ANTHROPIC_API_KEY` as a GitHub Actions secret, then:
-
-```yaml
-- name: Smoke test (full agent loop)
-  run: bash test/smoke-test.sh
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
----
-
-## Helper scripts
-
-| Script | Purpose |
-|--------|---------|
-| `test/smoke-test.sh` | Levels 3 + 4 smoke test (see above) |
-| `test/irc-check.mjs` | IRC observer — connects to Ergo, waits for a `PRIVMSG` in a channel. Used by Step 6b. |
-
-### `test/irc-check.mjs` usage
+**Must be run from `manager/`** so that `irc-framework` resolves from
+`manager/node_modules`:
 
 ```bash
-# Run from manager/ so irc-framework resolves from node_modules
-cd manager
-node ../test/irc-check.mjs <host> <port> <channel> <timeout_ms> [observer_nick]
-
-# Example
-node ../test/irc-check.mjs localhost 16667 '#main' 60000 smoke-checker
+cd manager && node ../test/irc-check.mjs <host> <port> <channel> <timeout_ms> [observer_nick] [filter_nick]
 ```
 
-Exits `0` on response received, `1` on timeout, `2` on bad arguments.
+### Arguments
+
+| Arg | Default | Description |
+|-----|---------|-------------|
+| `host` | — | IRC server hostname |
+| `port` | — | IRC server port |
+| `channel` | — | Channel to join (e.g. `#main`) |
+| `timeout_ms` | `60000` | How long to wait (ms) |
+| `observer_nick` | `smoke-checker` | Nick to use when connecting |
+| `filter_nick` | *(none)* | If set, only messages **from this nick** count as a pass |
+
+When `filter_nick` is supplied (typically the agent's UUID from the team
+creation API response), spurious messages from other bots or system notices are
+ignored. Without it, any `PRIVMSG` from a non-observer nick passes.
+
+### Example
+
+```bash
+# Any response in #main passes:
+cd manager && node ../test/irc-check.mjs localhost 16667 '#main' 60000 my-observer
+
+# Only a specific agent (UUID) passes:
+cd manager && node ../test/irc-check.mjs localhost 16667 '#main' 60000 my-observer abc123-agent-uuid
+```
