@@ -126,6 +126,16 @@ if [[ -z "$TEAM_ID" ]]; then
   fail 2 "create-team returned no team ID. Output: $CREATE_OUT" 2
 fi
 
+# Extract first agent ID — agents use their UUID as IRC nick, so we can filter
+AGENT_ID=$(echo "$CREATE_OUT" | node -e "
+  process.stdin.resume(); let d='';
+  process.stdin.on('data', c => d += c);
+  process.stdin.on('end', () => {
+    try { const j = JSON.parse(d); process.stdout.write((j.agents?.[0]?.id) || ''); }
+    catch(e) { process.stdout.write(''); }
+  });
+")
+
 COMPOSE_FILE="/tmp/a1-teams/$TEAM_ID/docker-compose.yml"
 if [[ ! -f "$COMPOSE_FILE" ]]; then
   fail 2 "compose file not found: $COMPOSE_FILE" 2
@@ -267,8 +277,20 @@ elif [[ -z "$IRC_HOST_PORT" ]]; then
   warn "Ergo has no exposed host port — skipping IRC response check"
   IRC_STEP_PASS=1
 else
-  # Send a PING message to #main so the agent has something to respond to
-  # (step 6 already sent one, but give the agent a clear prompt here)
+  # Start the IRC observer BEFORE sending the PING to avoid the race where the
+  # agent replies before our observer has joined the channel.
+  CHECKER_NICK="smoke-checker-$$"
+  info "Starting IRC observer (nick: $CHECKER_NICK, filter: ${AGENT_ID:-any})…"
+  # Run irc-check.mjs from manager/ so irc-framework resolves correctly.
+  # Pass AGENT_ID as filter_nick so only the agent's own messages count.
+  (cd "$ROOT/manager" && node "$ROOT/test/irc-check.mjs" \
+    localhost "$IRC_HOST_PORT" '#main' 60000 "$CHECKER_NICK" "${AGENT_ID:-}") &
+  CHECKER_PID=$!
+
+  # Small grace period so the observer can connect and JOIN before the PING lands
+  sleep 2
+
+  # Now send the PING — the observer is already listening
   info "Sending PING to #main for agent response test…"
   curl -s -o /dev/null \
     -X POST \
@@ -277,14 +299,11 @@ else
     -d '{"text":"[smoke-test] PING — please respond to confirm you are online"}' \
     "http://localhost:$MANAGER_PORT/api/teams/$TEAM_ID/channels/main/messages" || true
 
-  # Connect to Ergo as observer and wait up to 60s for any agent reply
-  CHECKER_NICK="smoke-checker-$$"
-  info "Waiting up to 60s for agent response in #main (observer nick: $CHECKER_NICK)…"
-  if (cd "$ROOT/manager" && node "$ROOT/test/irc-check.mjs" localhost "$IRC_HOST_PORT" '#main' 60000 "$CHECKER_NICK"); then
+  # Wait for the observer process to exit (it exits 0 on success, 1 on timeout)
+  if wait "$CHECKER_PID"; then
     pass "6b" "agent responded in #main"
     IRC_STEP_PASS=1
   else
-    warn "No agent response in #main within 60s — agent may still be starting or API key mode needs more time"
     IRC_STEP_PASS=0
   fi
 fi
