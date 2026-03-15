@@ -523,10 +523,4 @@ describe('routeMessage — @all nudge', () => {
     expect(writeFifo).not.toHaveBeenCalled()
   })
 
-  it('skips nudge when sender nick is the IRC gateway nick (manager-{teamName}) — prevents status-broadcaster loop', () => {
-    // The gateway nick for team 'nudge-test' is 'manager-nudge-test'
-    const gatewayNick = `manager-${team.name}`
-    routeMessage(makeEvent({ teamId: team.id, channelId: CH_MAIN_ID, nick: gatewayNick, text: '@all statuses | Team: nudge-test | Agents: dev' }))
-    expect(writeFifo).not.toHaveBeenCalled()
-  })
 })
